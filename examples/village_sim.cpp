@@ -573,7 +573,7 @@ void setupCombatBT(NPC& npc, GameWorld& world) {
                                     break;
                                 }
                             }
-                            if (!ability || dist > ability->range + 1.0f) return NodeStatus::Failure;
+                            if (!ability || dist > ability->range + 2.0f) return NodeStatus::Failure;
                             npc.isMoving = false;
                             auto result = npc.combat.dealDamage(enemy->combat, *ability);
                             std::cout << "[" << formatTime(bb.getOr<float>("_time", 0.0f))
@@ -616,7 +616,7 @@ void setupCombatBT(NPC& npc, GameWorld& world) {
                                 break;
                             }
                         }
-                        if (!ability || dist > ability->range + 1.0f) return NodeStatus::Failure;
+                        if (!ability || dist > ability->range + 2.0f) return NodeStatus::Failure;
                         npc.isMoving = false;
                         auto result = npc.combat.dealDamage(enemy->combat, *ability);
                         std::cout << "[" << formatTime(bb.getOr<float>("_time", 0.0f))
@@ -671,6 +671,17 @@ void logRelationship(const std::string& timeStr, const std::string& a,
 // =======================================================================
 
 void runCombatRound(GameWorld& world, const std::string& timeStr) {
+    // Remove dead wolves from perception
+    for (auto& npc : world.npcs()) {
+        if (npc->type != NPCType::Enemy) {
+            for (auto& wolf : world.npcs()) {
+                if (wolf->type == NPCType::Enemy && !wolf->combat.stats.isAlive()) {
+                    npc->perception.forgetEntity(wolf->id);
+                }
+            }
+        }
+    }
+
     // Check if all wolves are dead
     bool anyWolfAlive = false;
     for (auto& npc : world.npcs()) {
@@ -683,6 +694,19 @@ void runCombatRound(GameWorld& world, const std::string& timeStr) {
     if (!anyWolfAlive) {
         g_combatResolved = true;
         g_combatActive = false;
+
+        // Clear threat flags and perception on all villagers
+        for (auto& npc : world.npcs()) {
+            if (npc->type != NPCType::Enemy) {
+                npc->fsm.blackboard().set<bool>("has_threats", false);
+                npc->combat.inCombat = false;
+                for (auto& other : world.npcs()) {
+                    if (other->type == NPCType::Enemy) {
+                        npc->perception.forgetEntity(other->id);
+                    }
+                }
+            }
+        }
 
         auto* alaric = world.findNPC("Alaric");
         auto* brina = world.findNPC("Brina");
@@ -713,7 +737,7 @@ void runCombatRound(GameWorld& world, const std::string& timeStr) {
                 }
             }
         }
-        return;
+        // No early return - continue to Alaric BT and Brina attacks
     }
 
     // Wolf attacks
@@ -748,12 +772,34 @@ void runCombatRound(GameWorld& world, const std::string& timeStr) {
         }
     }
 
+    // Alaric attacks via Behavior Tree
+    {
+        auto* alaric = world.findNPC("Alaric");
+        if (alaric && alaric->combat.stats.isAlive()) {
+            // Remove dead enemies from perception before evaluating
+            for (auto& npc : world.npcs()) {
+                if (npc->type == NPCType::Enemy && !npc->combat.stats.isAlive()) {
+                    alaric->perception.forgetEntity(npc->id);
+                }
+            }
+            std::vector<PerceivedEntity> pv;
+            for (const auto& [id, pe] : alaric->perception.perceived()) pv.push_back(pe);
+            alaric->combat.evaluateThreats(pv, alaric->position);
+            if (alaric->combat.threatCount() > 0) {
+                auto& bb = alaric->fsm.blackboard();
+                bb.set<float>("_time", world.time().totalHours());
+                bb.set<float>("health_pct", alaric->combat.stats.healthPercent());
+                alaric->combatBT.tick(bb);
+            }
+        }
+    }
+
     // Brina joins combat if Alaric is fighting and she has enough HP
     auto* brina = world.findNPC("Brina");
-    auto* alaric = world.findNPC("Alaric");
-    if (brina && alaric && brina->combat.stats.isAlive()
+    auto* alaricPtr = world.findNPC("Alaric");
+    if (brina && alaricPtr && brina->combat.stats.isAlive()
         && brina->combat.stats.healthPercent() > 0.5f
-        && alaric->combat.inCombat) {
+        && alaricPtr->combat.inCombat) {
 
         // Find a wolf to attack
         for (auto& wolf : world.npcs()) {
@@ -777,6 +823,12 @@ void runCombatRound(GameWorld& world, const std::string& timeStr) {
                             wolf->id, 0.8f);
                         world.events().publish(CombatEvent{
                             brina->id, wolf->id, result.damageDealt, true, brina->position});
+                        // Alpha wolf killed - break pack morale
+                        if (wolf->name == "Wolf_1") {
+                            g_wolfPackMoraleBroken = true;
+                            std::cout << "[" << timeStr
+                                      << "] Wolf pack morale broken! Alpha is down!\n";
+                        }
                     }
                 }
                 break; // one attack per round
@@ -1096,6 +1148,16 @@ std::shared_ptr<NPC> createBrina(GameWorld& world, std::shared_ptr<Pathfinder> p
             auto act = bb.get<std::string>("scheduled_activity");
             return act && *act == "Sleep";
         }, 1);
+    npc->fsm.addTransition("Work", "Sleep",
+        [](const Blackboard& bb) {
+            auto act = bb.get<std::string>("scheduled_activity");
+            return act && *act == "Sleep";
+        }, 2);
+    npc->fsm.addTransition("Socialize", "Sleep",
+        [](const Blackboard& bb) {
+            auto act = bb.get<std::string>("scheduled_activity");
+            return act && *act == "Sleep";
+        }, 2);
     // Brina joins combat if Alaric is fighting & her HP is ok
     npc->fsm.addTransition("Work", "Combat",
         [](const Blackboard& bb) {
@@ -1111,6 +1173,26 @@ std::shared_ptr<NPC> createBrina(GameWorld& world, std::shared_ptr<Pathfinder> p
         [](const Blackboard& bb) { return !bb.getOr<bool>("has_threats", false); }, 1);
     npc->fsm.addTransition("Combat", "Work",
         [](const Blackboard& bb) { return !bb.getOr<bool>("has_threats", false); }, 1);
+    npc->fsm.addTransition("Combat", "Eat",
+        [](const Blackboard& bb) {
+            auto act = bb.get<std::string>("scheduled_activity");
+            return !bb.getOr<bool>("has_threats", false) && act && *act == "Eat";
+        }, 2);
+    npc->fsm.addTransition("Combat", "Sleep",
+        [](const Blackboard& bb) {
+            auto act = bb.get<std::string>("scheduled_activity");
+            return !bb.getOr<bool>("has_threats", false) && act && *act == "Sleep";
+        }, 2);
+    npc->fsm.addTransition("Flee", "Eat",
+        [](const Blackboard& bb) {
+            auto act = bb.get<std::string>("scheduled_activity");
+            return !bb.getOr<bool>("has_threats", false) && act && *act == "Eat";
+        }, 2);
+    npc->fsm.addTransition("Flee", "Sleep",
+        [](const Blackboard& bb) {
+            auto act = bb.get<std::string>("scheduled_activity");
+            return !bb.getOr<bool>("has_threats", false) && act && *act == "Sleep";
+        }, 2);
 
     npc->fsm.setInitialState("Work");
     return npc;
@@ -1441,6 +1523,21 @@ std::shared_ptr<NPC> createElmund(GameWorld& world, std::shared_ptr<Pathfinder> 
         [](const Blackboard& bb) { return bb.getOr<bool>("has_threats", false); }, 10);
     npc->fsm.addTransition("Flee", "Work",
         [](const Blackboard& bb) { return !bb.getOr<bool>("has_threats", false); }, 1);
+    npc->fsm.addTransition("Flee", "Eat",
+        [](const Blackboard& bb) {
+            auto act = bb.get<std::string>("scheduled_activity");
+            return !bb.getOr<bool>("has_threats", false) && act && *act == "Eat";
+        }, 2);
+    npc->fsm.addTransition("Flee", "Sleep",
+        [](const Blackboard& bb) {
+            auto act = bb.get<std::string>("scheduled_activity");
+            return !bb.getOr<bool>("has_threats", false) && act && *act == "Sleep";
+        }, 2);
+    npc->fsm.addTransition("Flee", "Socialize",
+        [](const Blackboard& bb) {
+            auto act = bb.get<std::string>("scheduled_activity");
+            return !bb.getOr<bool>("has_threats", false) && act && *act == "Socialize";
+        }, 1);
 
     npc->fsm.setInitialState("Work");
     return npc;
@@ -1495,6 +1592,7 @@ void scheduleWorldEvents(GameWorld& world, FactionSystem& factions,
                 farhan->log(formatTime(bb.getOr<float>("_time", 0.0f)),
                     "Greetings! I am Farhan, a traveling merchant. I have rare wares!");
             });
+        farhan->fsm.blackboard().set<float>("_time", w.time().totalHours());
         farhan->fsm.setInitialState("Trade");
 
         farhan->subscribeToEvents(w.events());
@@ -1677,7 +1775,7 @@ void scheduleWorldEvents(GameWorld& world, FactionSystem& factions,
                   << "] Dagna: \"Stew's ready! Come and get it while it's hot!\"\n";
     });
 
-    // === 13:00 - Farhan leaves, back to work ===
+    // === 13:00 - Farhan leaves ===
     world.eventManager().scheduleEvent(13.0f, "farhan_leaves", [](GameWorld& w) {
         std::cout << "\n  ** Afternoon begins. Back to work. **\n\n";
         auto* farhan = w.findNPC("Farhan");
@@ -1689,10 +1787,13 @@ void scheduleWorldEvents(GameWorld& world, FactionSystem& factions,
             farhan->combat.stats.health = 0.0f; // mark as "left"
             farhan->verbose = false;
         }
+    });
 
-        // Show Utility AI decisions
+    // === 13:15 - Show Utility AI decisions (schedule now returns Work/Patrol/Trade) ===
+    world.eventManager().scheduleEvent(13.25f, "utility_ai_log", [](GameWorld& w) {
         for (auto& npc : w.npcs()) {
-            if (npc->type != NPCType::Enemy && npc->combat.stats.isAlive()) {
+            if (npc->type != NPCType::Enemy && npc->combat.stats.isAlive()
+                && npc->name != "Farhan") {
                 auto decision = npc->fsm.blackboard().get<std::string>("utility_decision");
                 auto score = npc->fsm.blackboard().getOr<float>("utility_score", 0.0f);
                 if (decision) {
@@ -1726,15 +1827,22 @@ void scheduleWorldEvents(GameWorld& world, FactionSystem& factions,
         for (int i = 0; i < 3; ++i) {
             EntityId wid = 100 + i;
             auto wolf = std::make_shared<NPC>(wid, "Wolf_" + std::to_string(i + 1), NPCType::Enemy);
-            wolf->position = Vec2(36.0f, 10.0f + i * 2.0f);
+            wolf->position = Vec2(21.0f, 11.0f + i * 1.0f);
             wolf->pathfinder = pf;
             wolf->factionId = WOLF_FACTION;
             wolf->verbose = false;
-            wolf->moveSpeed = 5.0f;
+            wolf->moveSpeed = 8.0f;
 
-            wolf->combat.stats = {40.0f, 40.0f, 12.0f, 4.0f, 7.0f, 0.1f, {}};
+            // Different stats per wolf - Alpha is strongest
+            if (i == 0) {
+                wolf->combat.stats = {50.0f, 50.0f, 15.0f, 5.0f, 8.0f, 0.15f, {}};
+            } else if (i == 1) {
+                wolf->combat.stats = {35.0f, 35.0f, 11.0f, 3.0f, 7.0f, 0.08f, {}};
+            } else {
+                wolf->combat.stats = {30.0f, 30.0f, 9.0f, 2.0f, 6.0f, 0.05f, {}};
+            }
             wolf->combat.stats.abilities.push_back(
-                {"Bite", AbilityType::Melee, DamageType::Physical, 10.0f, 1.5f, 0.03f, 0.0f, 0.0f});
+                {"Bite", AbilityType::Melee, DamageType::Physical, 10.0f, 3.0f, 0.03f, 0.0f, 0.0f});
 
             wolf->fsm.addState("Hunt",
                 [wolf = wolf.get(), &w](Blackboard& bb, float dt) {
@@ -1778,9 +1886,17 @@ void scheduleWorldEvents(GameWorld& world, FactionSystem& factions,
         std::cout << "[" << w.time().formatClock()
                   << "] Wolf_1 (Alpha) leads pack in Wedge formation toward village.\n";
 
-        // Alaric threat evaluation
+        // Alaric rushes to intercept wolves
         auto* alaric = w.findNPC("Alaric");
         if (alaric) {
+            alaric->position = Vec2(21.0f, 12.0f); // Rush to combat position
+            alaric->isMoving = false;
+            alaric->fsm.blackboard().set<bool>("has_threats", true);
+            alaric->combat.inCombat = true;
+
+            { std::vector<PerceivedEntity> pv;
+              for (const auto& [id, pe] : alaric->perception.perceived()) pv.push_back(pe);
+              alaric->combat.evaluateThreats(pv, alaric->position); }
             auto& threats = alaric->combat.threatTable();
             std::cout << "[" << w.time().formatClock()
                       << "] Alaric evaluates threats:";
@@ -1794,7 +1910,13 @@ void scheduleWorldEvents(GameWorld& world, FactionSystem& factions,
             std::cout << "\n";
             std::cout << "[" << w.time().formatClock()
                       << "] Alaric targets Wolf_1 (Alpha). Moving to engage.\n";
-            alaric->moveTo(Vec2(36.0f, 12.0f));
+        }
+
+        // Brina rushes to help
+        auto* brina = w.findNPC("Brina");
+        if (brina) {
+            brina->position = Vec2(20.0f, 11.0f); // Rush to nearby position
+            brina->isMoving = false;
         }
 
         g_combatActive = true;
@@ -1814,9 +1936,17 @@ void scheduleWorldEvents(GameWorld& world, FactionSystem& factions,
                 }
             }
         }
-        // Post-combat emotions
+        // Clear threat flags, perception, and post-combat emotions
         for (auto& npc : w.npcs()) {
             if (npc->type != NPCType::Enemy && npc->combat.stats.isAlive()) {
+                npc->fsm.blackboard().set<bool>("has_threats", false);
+                npc->combat.inCombat = false;
+                // Remove dead wolves from perception
+                for (auto& other : w.npcs()) {
+                    if (other->type == NPCType::Enemy) {
+                        npc->perception.forgetEntity(other->id);
+                    }
+                }
                 npc->emotions.satisfyNeed(NeedType::Safety, 20.0f);
                 npc->emotions.addEmotion(EmotionType::Happy, 0.3f, 2.0f);
             }

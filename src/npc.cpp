@@ -17,6 +17,7 @@ void NPC::update(float dt, GameWorld& world) {
     std::vector<SensoryInput> sensoryInputs;
     for (const auto& other : world.npcs()) {
         if (other->id == id) continue;
+        if (!other->combat.stats.isAlive()) continue; // Skip dead NPCs
         SensoryInput si;
         si.entityId = other->id;
         si.position = other->position;
@@ -27,6 +28,12 @@ void NPC::update(float dt, GameWorld& world) {
     perception.update(position, facing, sensoryInputs, currentTime, dt);
 
     // ─── 4. Update combat threat evaluation ──────────────────────────
+    // Remove dead entities from perception
+    for (const auto& other : world.npcs()) {
+        if (!other->combat.stats.isAlive() && perception.hasPerceivedEntity(other->id)) {
+            perception.forgetEntity(other->id);
+        }
+    }
     auto threats = perception.getThreats();
     std::vector<PerceivedEntity> perceivedVec;
     for (const auto& [eid, pe] : perception.perceived()) {
@@ -77,10 +84,10 @@ void NPC::update(float dt, GameWorld& world) {
     fsm.update(dt);
 
     // 6d. Behavior Trees tick in specific states
+    // Note: Combat BT is ticked externally by runCombatRound() to avoid
+    // double-ticking and dead entity race conditions
     std::string state = fsm.currentState();
-    if (state == "Combat") {
-        combatBT.tick(bb);
-    } else if (state == "Socialize") {
+    if (state == "Socialize") {
         socializeBT.tick(bb);
     }
 

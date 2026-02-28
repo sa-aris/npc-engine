@@ -61,8 +61,8 @@ public:
             ability.currentCooldown = std::max(0.0f, ability.currentCooldown - dt);
         }
 
-        // Passive regeneration out of combat
-        if (!inCombat && stats.health < stats.maxHealth) {
+        // Passive regeneration out of combat (only if alive)
+        if (!inCombat && stats.isAlive() && stats.health < stats.maxHealth) {
             stats.health = std::min(stats.maxHealth, stats.health + 1.0f * dt);
         }
     }

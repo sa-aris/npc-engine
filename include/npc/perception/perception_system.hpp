@@ -124,6 +124,8 @@ public:
 
     const std::map<EntityId, PerceivedEntity>& perceived() const { return perceived_; }
     bool hasPerceivedEntity(EntityId id) const { return perceived_.count(id) > 0; }
+    void forgetEntity(EntityId id) { perceived_.erase(id); }
+    void clearAll() { perceived_.clear(); }
 
     void forceAwareness(EntityId id, Vec2 pos, AwarenessLevel level, bool hostile, float time) {
         auto& pe = perceived_[id];
