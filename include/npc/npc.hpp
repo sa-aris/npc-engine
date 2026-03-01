@@ -164,7 +164,13 @@ public:
            << " at " << position.toString()
            << " | HP: " << static_cast<int>(combat.stats.health)
            << "/" << static_cast<int>(combat.stats.maxHealth)
-           << " | State: " << fsm.currentState()
+           << " | STA: " << static_cast<int>(combat.stats.stamina.current)
+           << "/" << static_cast<int>(combat.stats.stamina.max);
+        if (combat.stats.mana.max > 0.0f) {
+            ss << " | MP: " << static_cast<int>(combat.stats.mana.current)
+               << "/" << static_cast<int>(combat.stats.mana.max);
+        }
+        ss << " | State: " << fsm.currentState()
            << " | Mood: " << emotions.getMoodString()
            << " | Traits: " << personality.traitSummary();
         return ss.str();

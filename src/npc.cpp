@@ -46,6 +46,8 @@ void NPC::update(float dt, GameWorld& world) {
     auto& bb = fsm.blackboard();
     bb.set<float>("_time", currentTime);
     bb.set<float>("health_pct", combat.stats.healthPercent());
+    bb.set<float>("stamina_pct", combat.stats.stamina.percent());
+    bb.set<float>("mana_pct", combat.stats.mana.percent());
     bb.set<bool>("in_combat", combat.inCombat);
     bb.set<bool>("has_threats", !threats.empty());
     bb.set<int>("threat_count", combat.threatCount());
@@ -98,7 +100,13 @@ void NPC::update(float dt, GameWorld& world) {
         socializeBT.tick(bb);
     }
 
-    // ─── 7. Movement ─────────────────────────────────────────────────
+    // ─── 7. Resource regen while resting ────────────────────────────
+    if (state == "Sleep" || state == "Idle" || state == "Eat") {
+        combat.stats.stamina.regen(combat.stats.stamina.restRegenRate * dt);
+        combat.stats.mana.regen(combat.stats.mana.restRegenRate * dt);
+    }
+
+    // ─── 8. Movement ─────────────────────────────────────────────────
     updateMovement(dt);
 }
 

@@ -925,10 +925,11 @@ std::shared_ptr<NPC> createAlaric(GameWorld& world, std::shared_ptr<Pathfinder> 
 
     // Combat stats - strong fighter
     npc->combat.stats = {120.0f, 120.0f, 20.0f, 15.0f, 6.0f, 0.15f, {}};
+    npc->combat.stats.stamina = {120.0f, 120.0f, 6.0f, 18.0f};
     npc->combat.stats.abilities.push_back(
-        {"Sword Strike", AbilityType::Melee, DamageType::Physical, 15.0f, 2.0f, 0.05f, 0.0f, 0.0f});
+        {"Sword Strike", AbilityType::Melee, DamageType::Physical, 15.0f, 2.0f, 0.05f, 0.0f, 0.0f, 0.0f, 10.0f});
     npc->combat.stats.abilities.push_back(
-        {"Shield Bash", AbilityType::Melee, DamageType::Physical, 8.0f, 1.5f, 0.1f, 0.0f, 0.0f});
+        {"Shield Bash", AbilityType::Melee, DamageType::Physical, 8.0f, 1.5f, 0.1f, 0.0f, 0.0f, 0.0f, 15.0f});
 
     // Patrol waypoints
     std::vector<Vec2> patrolRoute = {
@@ -1100,8 +1101,9 @@ std::shared_ptr<NPC> createBrina(GameWorld& world, std::shared_ptr<Pathfinder> p
     npc->schedule = ScheduleSystem::createBlacksmithSchedule();
 
     npc->combat.stats = {80.0f, 80.0f, 15.0f, 10.0f, 4.0f, 0.1f, {}};
+    npc->combat.stats.stamina = {100.0f, 100.0f, 5.0f, 15.0f};
     npc->combat.stats.abilities.push_back(
-        {"Hammer Strike", AbilityType::Melee, DamageType::Physical, 12.0f, 1.5f, 0.08f, 0.0f, 0.0f});
+        {"Hammer Strike", AbilityType::Melee, DamageType::Physical, 12.0f, 1.5f, 0.08f, 0.0f, 0.0f, 0.0f, 12.0f});
 
     setupItems(npc->trade);
     npc->trade.inventory.addItem(ITEM_SWORD, 3);
@@ -1507,8 +1509,9 @@ std::shared_ptr<NPC> createElmund(GameWorld& world, std::shared_ptr<Pathfinder> 
     npc->schedule = ScheduleSystem::createFarmerSchedule();
 
     npc->combat.stats = {50.0f, 50.0f, 5.0f, 3.0f, 4.0f, 0.02f, {}};
+    npc->combat.stats.stamina = {60.0f, 60.0f, 4.0f, 12.0f};
     npc->combat.stats.abilities.push_back(
-        {"Pitchfork Jab", AbilityType::Melee, DamageType::Physical, 5.0f, 1.5f, 0.1f, 0.0f, 0.0f});
+        {"Pitchfork Jab", AbilityType::Melee, DamageType::Physical, 5.0f, 1.5f, 0.1f, 0.0f, 0.0f, 0.0f, 5.0f});
 
     setupItems(npc->trade);
     npc->trade.inventory.addItem(ITEM_WHEAT, 30);
@@ -1926,13 +1929,16 @@ void scheduleWorldEvents(GameWorld& world, FactionSystem& factions,
             // Different stats per wolf - Alpha is strongest
             if (i == 0) {
                 wolf->combat.stats = {50.0f, 50.0f, 15.0f, 5.0f, 8.0f, 0.15f, {}};
+                wolf->combat.stats.stamina = {80.0f, 80.0f, 6.0f, 0.0f};
             } else if (i == 1) {
                 wolf->combat.stats = {35.0f, 35.0f, 11.0f, 3.0f, 7.0f, 0.08f, {}};
+                wolf->combat.stats.stamina = {60.0f, 60.0f, 5.0f, 0.0f};
             } else {
                 wolf->combat.stats = {30.0f, 30.0f, 9.0f, 2.0f, 6.0f, 0.05f, {}};
+                wolf->combat.stats.stamina = {50.0f, 50.0f, 4.0f, 0.0f};
             }
             wolf->combat.stats.abilities.push_back(
-                {"Bite", AbilityType::Melee, DamageType::Physical, 10.0f, 3.0f, 0.03f, 0.0f, 0.0f});
+                {"Bite", AbilityType::Melee, DamageType::Physical, 10.0f, 3.0f, 0.03f, 0.0f, 0.0f, 0.0f, 8.0f});
 
             wolf->fsm.addState("Hunt",
                 [wolf = wolf.get(), &w](Blackboard& bb, float dt) {

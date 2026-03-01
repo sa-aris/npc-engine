@@ -12,6 +12,19 @@
 
 namespace npc {
 
+// ─── Resource Pool (Mana / Stamina) ─────────────────────────────────
+struct ResourcePool {
+    float current = 100.0f;
+    float max = 100.0f;
+    float regenRate = 5.0f;      // per game-hour (passive, always)
+    float restRegenRate = 15.0f;  // per game-hour (while resting)
+
+    float percent() const { return max > 0.0f ? current / max : 0.0f; }
+    bool canSpend(float cost) const { return current >= cost; }
+    void spend(float cost) { current = std::max(0.0f, current - cost); }
+    void regen(float amount) { current = std::min(max, current + amount); }
+};
+
 struct CombatConfig {
     float passiveRegenRate = 1.0f;
     float awarenessThreatMul = 50.0f;
@@ -24,6 +37,7 @@ struct CombatConfig {
     float baseFleeLowHP = 0.2f;
     float baseFleeOutnumberedHP = 0.5f;
     int fleeOutnumberedCount = 3;
+    float staminaSprintCost = 5.0f;  // per game-hour while sprinting
 };
 
 struct Ability {
@@ -35,6 +49,8 @@ struct Ability {
     float cooldown = 2.0f;
     float currentCooldown = 0.0f;
     float healAmount = 0.0f;
+    float manaCost = 0.0f;
+    float staminaCost = 0.0f;
 
     bool isReady() const { return currentCooldown <= 0.0f; }
 };
@@ -47,6 +63,8 @@ struct CombatStats {
     float speed = 5.0f;
     float critChance = 0.1f;
     std::vector<Ability> abilities;
+    ResourcePool stamina{100.0f, 100.0f, 5.0f, 15.0f};
+    ResourcePool mana{0.0f, 0.0f, 3.0f, 10.0f};
 
     float healthPercent() const {
         return maxHealth > 0.0f ? health / maxHealth : 0.0f;
@@ -89,6 +107,12 @@ public:
         if (!inCombat && stats.isAlive() && stats.health < stats.maxHealth) {
             stats.health = std::min(stats.maxHealth, stats.health + combatConfig.passiveRegenRate * dt);
         }
+
+        // Passive resource regen (always, when alive)
+        if (stats.isAlive()) {
+            stats.stamina.regen(stats.stamina.regenRate * dt);
+            stats.mana.regen(stats.mana.regenRate * dt);
+        }
     }
 
     void evaluateThreats(const std::vector<PerceivedEntity>& perceived, Vec2 myPos) {
@@ -121,6 +145,8 @@ public:
         for (const auto& ab : stats.abilities) {
             if (!ab.isReady()) continue;
             if (distanceToTarget > ab.range) continue;
+            if (!stats.stamina.canSpend(ab.staminaCost)) continue;
+            if (!stats.mana.canSpend(ab.manaCost)) continue;
 
             float score = ab.damage;
             if (ab.type == AbilityType::AoE) score *= combatConfig.aoeDamageMul;
@@ -134,7 +160,9 @@ public:
 
     const Ability* selectHealAbility() const {
         for (const auto& ab : stats.abilities) {
-            if (ab.type == AbilityType::Heal && ab.isReady()) return &ab;
+            if (ab.type == AbilityType::Heal && ab.isReady()
+                && stats.stamina.canSpend(ab.staminaCost)
+                && stats.mana.canSpend(ab.manaCost)) return &ab;
         }
         return nullptr;
     }
@@ -154,6 +182,10 @@ public:
         bool killed = target.stats.health <= 0.0f;
         if (killed) target.stats.health = 0.0f;
 
+        // Spend resources
+        stats.stamina.spend(ability.staminaCost);
+        stats.mana.spend(ability.manaCost);
+
         for (auto& ab : stats.abilities) {
             if (ab.name == ability.name) {
                 ab.currentCooldown = ab.cooldown;
@@ -167,6 +199,11 @@ public:
     float heal(const Ability& ability) {
         float amount = ability.healAmount;
         stats.health = std::min(stats.maxHealth, stats.health + amount);
+
+        // Spend resources
+        stats.stamina.spend(ability.staminaCost);
+        stats.mana.spend(ability.manaCost);
+
         for (auto& ab : stats.abilities) {
             if (ab.name == ability.name) {
                 ab.currentCooldown = ab.cooldown;
