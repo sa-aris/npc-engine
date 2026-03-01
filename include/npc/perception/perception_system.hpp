@@ -14,13 +14,21 @@ struct PerceptionConfig {
     float sightAngle = 120.0f;  // degrees (total FOV)
     float hearingRange = 10.0f;
     float awarenessDecayRate = 0.1f; // per second
+    float sightAwarenessWeight = 0.5f;
+    float hearingAwarenessWeight = 0.3f;
+    float forgetTimeout = 30.0f;
+    float combatAwarenessThreshold = 0.8f;
+    float alertAwarenessThreshold = 0.5f;
+    float suspiciousAwarenessThreshold = 0.2f;
+    float inCombatNoise = 0.8f;
+    float defaultNoise = 0.3f;
 };
 
 struct PerceivedEntity {
     EntityId entityId = INVALID_ENTITY;
     Vec2 lastKnownPosition;
     AwarenessLevel awareness = AwarenessLevel::Unaware;
-    float awarenessValue = 0.0f;   // 0-1 continuous
+    float awarenessValue = 0.0f;
     float lastSeenTime = 0.0f;
     bool isHostile = false;
     float noiseLevel = 0.0f;
@@ -29,7 +37,7 @@ struct PerceivedEntity {
 struct SensoryInput {
     EntityId entityId;
     Vec2 position;
-    float noiseLevel = 0.0f;  // 0 = silent, 1 = very loud
+    float noiseLevel = 0.0f;
     bool isHostile = false;
 };
 
@@ -65,12 +73,12 @@ public:
 
             if (seen) {
                 float sightContribution = 1.0f - (dist / config.sightRange);
-                pe.awarenessValue = std::min(1.0f, pe.awarenessValue + sightContribution * 0.5f);
+                pe.awarenessValue = std::min(1.0f, pe.awarenessValue + sightContribution * config.sightAwarenessWeight);
                 pe.lastSeenTime = currentTime;
             }
             if (heard) {
                 float hearContribution = input.noiseLevel * (1.0f - dist / config.hearingRange);
-                pe.awarenessValue = std::min(1.0f, pe.awarenessValue + hearContribution * 0.3f);
+                pe.awarenessValue = std::min(1.0f, pe.awarenessValue + hearContribution * config.hearingAwarenessWeight);
             }
 
             pe.awareness = valueToLevel(pe.awarenessValue);
@@ -78,7 +86,7 @@ public:
 
         // Remove completely forgotten entities
         for (auto it = perceived_.begin(); it != perceived_.end(); ) {
-            if (it->second.awarenessValue <= 0.0f && currentTime - it->second.lastSeenTime > 30.0f) {
+            if (it->second.awarenessValue <= 0.0f && currentTime - it->second.lastSeenTime > config.forgetTimeout) {
                 it = perceived_.erase(it);
             } else {
                 ++it;
@@ -138,10 +146,10 @@ public:
     }
 
 private:
-    static AwarenessLevel valueToLevel(float v) {
-        if (v >= 0.8f) return AwarenessLevel::Combat;
-        if (v >= 0.5f) return AwarenessLevel::Alert;
-        if (v >= 0.2f) return AwarenessLevel::Suspicious;
+    AwarenessLevel valueToLevel(float v) const {
+        if (v >= config.combatAwarenessThreshold) return AwarenessLevel::Combat;
+        if (v >= config.alertAwarenessThreshold) return AwarenessLevel::Alert;
+        if (v >= config.suspiciousAwarenessThreshold) return AwarenessLevel::Suspicious;
         return AwarenessLevel::Unaware;
     }
 

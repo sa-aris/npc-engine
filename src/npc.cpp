@@ -21,7 +21,7 @@ void NPC::update(float dt, GameWorld& world) {
         SensoryInput si;
         si.entityId = other->id;
         si.position = other->position;
-        si.noiseLevel = other->combat.inCombat ? 0.8f : 0.3f;
+        si.noiseLevel = other->combat.inCombat ? perception.config.inCombatNoise : perception.config.defaultNoise;
         si.isHostile = (other->type == NPCType::Enemy);
         sensoryInputs.push_back(si);
     }

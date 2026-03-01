@@ -12,15 +12,29 @@
 
 namespace npc {
 
+struct CombatConfig {
+    float passiveRegenRate = 1.0f;
+    float awarenessThreatMul = 50.0f;
+    float proximityThreatMul = 30.0f;
+    float aoeDamageMul = 1.3f;
+    float critMultiplier = 1.5f;
+    float defenseMitigation = 0.5f;
+    float flankDistance = 3.0f;
+    float fleeDistance = 10.0f;
+    float baseFleeLowHP = 0.2f;
+    float baseFleeOutnumberedHP = 0.5f;
+    int fleeOutnumberedCount = 3;
+};
+
 struct Ability {
     std::string name;
     AbilityType type = AbilityType::Melee;
     DamageType damageType = DamageType::Physical;
     float damage = 10.0f;
     float range = 1.5f;
-    float cooldown = 2.0f;       // game hours
+    float cooldown = 2.0f;
     float currentCooldown = 0.0f;
-    float healAmount = 0.0f;     // for Heal type
+    float healAmount = 0.0f;
 
     bool isReady() const { return currentCooldown <= 0.0f; }
 };
@@ -53,6 +67,7 @@ struct ThreatEntry {
 class CombatSystem {
 public:
     CombatStats stats;
+    CombatConfig combatConfig;
     bool inCombat = false;
 
     // Personality-derived modifiers
@@ -67,14 +82,12 @@ public:
     }
 
     void update(float dt) {
-        // Reduce cooldowns
         for (auto& ability : stats.abilities) {
             ability.currentCooldown = std::max(0.0f, ability.currentCooldown - dt);
         }
 
-        // Passive regeneration out of combat (only if alive)
         if (!inCombat && stats.isAlive() && stats.health < stats.maxHealth) {
-            stats.health = std::min(stats.maxHealth, stats.health + 1.0f * dt);
+            stats.health = std::min(stats.maxHealth, stats.health + combatConfig.passiveRegenRate * dt);
         }
     }
 
@@ -84,8 +97,8 @@ public:
             if (!pe.isHostile || pe.awareness < AwarenessLevel::Alert) continue;
 
             float dist = myPos.distanceTo(pe.lastKnownPosition);
-            float threat = pe.awarenessValue * 50.0f * threatAwarenessMod_;
-            threat += (1.0f / std::max(1.0f, dist)) * 30.0f;
+            float threat = pe.awarenessValue * combatConfig.awarenessThreatMul * threatAwarenessMod_;
+            threat += (1.0f / std::max(1.0f, dist)) * combatConfig.proximityThreatMul;
             threatTable_.push_back({pe.entityId, threat, dist, pe.lastKnownPosition});
         }
         std::sort(threatTable_.begin(), threatTable_.end(),
@@ -110,7 +123,7 @@ public:
             if (distanceToTarget > ab.range) continue;
 
             float score = ab.damage;
-            if (ab.type == AbilityType::AoE) score *= 1.3f;
+            if (ab.type == AbilityType::AoE) score *= combatConfig.aoeDamageMul;
             if (score > bestScore) {
                 bestScore = score;
                 best = &ab;
@@ -134,14 +147,13 @@ public:
 
     DamageResult dealDamage(CombatSystem& target, const Ability& ability) {
         bool crit = Random::instance().chance(stats.critChance);
-        float dmg = (stats.attack + ability.damage) * (crit ? 1.5f : 1.0f);
-        float mitigated = std::max(1.0f, dmg - target.stats.defense * 0.5f);
+        float dmg = (stats.attack + ability.damage) * (crit ? combatConfig.critMultiplier : 1.0f);
+        float mitigated = std::max(1.0f, dmg - target.stats.defense * combatConfig.defenseMitigation);
 
         target.stats.health -= mitigated;
         bool killed = target.stats.health <= 0.0f;
         if (killed) target.stats.health = 0.0f;
 
-        // Reset cooldown
         for (auto& ab : stats.abilities) {
             if (ab.name == ability.name) {
                 ab.currentCooldown = ab.cooldown;
@@ -165,15 +177,16 @@ public:
     }
 
     void takeDamage(float amount) {
-        float mitigated = std::max(1.0f, amount - stats.defense * 0.5f);
+        float mitigated = std::max(1.0f, amount - stats.defense * combatConfig.defenseMitigation);
         stats.health = std::max(0.0f, stats.health - mitigated);
     }
 
     bool shouldFlee() const {
-        float lowThreshold = 0.2f * fleeThresholdMod_;
-        float outnumberedThreshold = 0.5f * fleeThresholdMod_;
+        float lowThreshold = combatConfig.baseFleeLowHP * fleeThresholdMod_;
+        float outnumberedThreshold = combatConfig.baseFleeOutnumberedHP * fleeThresholdMod_;
         return stats.healthPercent() < lowThreshold ||
-               (threatTable_.size() >= 3 && stats.healthPercent() < outnumberedThreshold);
+               (static_cast<int>(threatTable_.size()) >= combatConfig.fleeOutnumberedCount &&
+                stats.healthPercent() < outnumberedThreshold);
     }
 
     bool shouldHeal() const {
@@ -183,13 +196,12 @@ public:
     Vec2 getFlankPosition(Vec2 myPos, Vec2 targetPos) const {
         Vec2 dir = (myPos - targetPos).normalized();
         Vec2 perp = {-dir.y, dir.x};
-        float flankDist = 3.0f;
-        return targetPos + perp * flankDist;
+        return targetPos + perp * combatConfig.flankDistance;
     }
 
     Vec2 getFleePosition(Vec2 myPos, Vec2 threatPos) const {
         Vec2 dir = (myPos - threatPos).normalized();
-        return myPos + dir * 10.0f;
+        return myPos + dir * combatConfig.fleeDistance;
     }
 
     const std::vector<ThreatEntry>& threatTable() const { return threatTable_; }

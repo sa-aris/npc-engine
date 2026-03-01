@@ -12,15 +12,14 @@ namespace npc {
 
 struct Need {
     NeedType type;
-    float value = 80.0f;         // 0 (desperate) to 100 (fully satisfied)
-    float decayRate = 2.0f;      // units per game hour
+    float value = 80.0f;
+    float decayRate = 2.0f;
     float urgencyThreshold = 30.0f;
     float criticalThreshold = 10.0f;
 
     bool isUrgent() const { return value <= urgencyThreshold; }
     bool isCritical() const { return value <= criticalThreshold; }
 
-    // Normalized urgency: 0 = satisfied, 1 = desperate
     float urgency() const {
         return 1.0f - std::clamp(value / 100.0f, 0.0f, 1.0f);
     }
@@ -28,48 +27,94 @@ struct Need {
 
 struct EmotionState {
     EmotionType type;
-    float intensity = 0.5f;  // 0-1
-    float duration = 1.0f;   // game hours remaining
+    float intensity = 0.5f;
+    float duration = 1.0f;
     float elapsed = 0.0f;
+};
+
+struct EmotionConfig {
+    struct NeedDefaults {
+        float hunger  = 80.0f, hungerDecay  = 4.0f, hungerUrgency  = 30.0f, hungerCritical  = 10.0f;
+        float thirst  = 85.0f, thirstDecay  = 5.0f, thirstUrgency  = 30.0f, thirstCritical  = 10.0f;
+        float sleep   = 90.0f, sleepDecay   = 3.0f, sleepUrgency   = 25.0f, sleepCritical   =  8.0f;
+        float social  = 70.0f, socialDecay  = 1.5f, socialUrgency  = 25.0f, socialCritical  = 10.0f;
+        float fun     = 60.0f, funDecay     = 1.0f, funUrgency     = 20.0f, funCritical     =  5.0f;
+        float safety  =100.0f, safetyDecay  = 0.5f, safetyUrgency  = 40.0f, safetyCritical  = 20.0f;
+        float comfort = 75.0f, comfortDecay = 0.8f, comfortUrgency = 20.0f, comfortCritical =  5.0f;
+    } needs;
+
+    // Combat modifier
+    float combatSafetyBase = 0.5f;
+    float combatSafetyScale = 0.5f;
+    float angerCombatBoost = 0.3f;
+    float fearCombatPenalty = 0.4f;
+    float combatModMin = 0.1f;
+    float combatModMax = 2.0f;
+
+    // Social modifier
+    float socialBase = 0.5f;
+    float socialScale = 0.5f;
+    float positiveMoodThreshold = 0.2f;
+    float positiveMoodBoost = 1.2f;
+    float negativeMoodThreshold = -0.3f;
+    float negativeMoodPenalty = 0.7f;
+    float socialModMin = 0.1f;
+    float socialModMax = 2.0f;
+
+    // Flee modifier
+    float fleeSafetyWeight = 0.5f;
+
+    // Mood calculation
+    float moodSafetyWeight = 2.0f;
+    float moodHungerSleepWeight = 1.5f;
+    float baseEmotionWeight = 0.4f;
+
+    // Mood thresholds
+    float joyfulThreshold = 0.5f;
+    float contentThreshold = 0.2f;
+    float neutralThreshold = -0.2f;
+    float uneasyThreshold = -0.5f;
+
+    // Emotion intensification
+    float emotionIntensifyFactor = 0.5f;
 };
 
 class EmotionSystem {
 public:
-    EmotionSystem() {
-        // Initialize default needs
-        needs_[NeedType::Hunger]  = {NeedType::Hunger,  80.0f, 4.0f,  30.0f, 10.0f};
-        needs_[NeedType::Thirst]  = {NeedType::Thirst,  85.0f, 5.0f,  30.0f, 10.0f};
-        needs_[NeedType::Sleep]   = {NeedType::Sleep,   90.0f, 3.0f,  25.0f,  8.0f};
-        needs_[NeedType::Social]  = {NeedType::Social,  70.0f, 1.5f,  25.0f, 10.0f};
-        needs_[NeedType::Fun]     = {NeedType::Fun,     60.0f, 1.0f,  20.0f,  5.0f};
-        needs_[NeedType::Safety]  = {NeedType::Safety, 100.0f, 0.5f,  40.0f, 20.0f};
-        needs_[NeedType::Comfort] = {NeedType::Comfort, 75.0f, 0.8f,  20.0f,  5.0f};
+    EmotionConfig config_;
+
+    EmotionSystem() : EmotionSystem(EmotionConfig{}) {}
+
+    explicit EmotionSystem(const EmotionConfig& cfg) : config_(cfg) {
+        auto& n = config_.needs;
+        needs_[NeedType::Hunger]  = {NeedType::Hunger,  n.hunger,  n.hungerDecay,  n.hungerUrgency,  n.hungerCritical};
+        needs_[NeedType::Thirst]  = {NeedType::Thirst,  n.thirst,  n.thirstDecay,  n.thirstUrgency,  n.thirstCritical};
+        needs_[NeedType::Sleep]   = {NeedType::Sleep,   n.sleep,   n.sleepDecay,   n.sleepUrgency,   n.sleepCritical};
+        needs_[NeedType::Social]  = {NeedType::Social,  n.social,  n.socialDecay,  n.socialUrgency,  n.socialCritical};
+        needs_[NeedType::Fun]     = {NeedType::Fun,     n.fun,     n.funDecay,     n.funUrgency,     n.funCritical};
+        needs_[NeedType::Safety]  = {NeedType::Safety,  n.safety,  n.safetyDecay,  n.safetyUrgency,  n.safetyCritical};
+        needs_[NeedType::Comfort] = {NeedType::Comfort, n.comfort, n.comfortDecay, n.comfortUrgency, n.comfortCritical};
     }
 
     void update(float dt) {
-        // Decay needs
         for (auto& [type, need] : needs_) {
             need.value -= need.decayRate * dt;
             need.value = std::max(0.0f, need.value);
         }
 
-        // Update emotions
         for (auto& e : emotions_) {
             e.elapsed += dt;
         }
-        // Remove expired emotions
         emotions_.erase(
             std::remove_if(emotions_.begin(), emotions_.end(),
                 [](const EmotionState& e) { return e.elapsed >= e.duration; }),
             emotions_.end()
         );
 
-        // Update mood based on needs and emotions
         updateMood();
     }
 
     void addEmotion(EmotionType type, float intensity = 0.5f, float duration = 1.0f) {
-        // Apply personality modifiers to emotion intensity
         float adjustedIntensity = intensity;
         if (type == EmotionType::Fearful) {
             adjustedIntensity *= fearIntensityMod_;
@@ -78,10 +123,9 @@ public:
         }
         adjustedIntensity = std::clamp(adjustedIntensity, 0.0f, 1.0f);
 
-        // If same emotion exists, intensify it
         for (auto& e : emotions_) {
             if (e.type == type) {
-                e.intensity = std::min(1.0f, e.intensity + adjustedIntensity * 0.5f);
+                e.intensity = std::min(1.0f, e.intensity + adjustedIntensity * config_.emotionIntensifyFactor);
                 e.duration = std::max(e.duration - e.elapsed, duration);
                 e.elapsed = 0.0f;
                 return;
@@ -143,47 +187,40 @@ public:
     }
 
     std::string getMoodString() const {
-        if (mood_ > 0.5f) return "Joyful";
-        if (mood_ > 0.2f) return "Content";
-        if (mood_ > -0.2f) return "Neutral";
-        if (mood_ > -0.5f) return "Uneasy";
+        if (mood_ > config_.joyfulThreshold)  return "Joyful";
+        if (mood_ > config_.contentThreshold) return "Content";
+        if (mood_ > config_.neutralThreshold) return "Neutral";
+        if (mood_ > config_.uneasyThreshold)  return "Uneasy";
         return "Distressed";
     }
 
-    const Need& getNeed(NeedType type) const {
-        return needs_.at(type);
-    }
-
-    Need& getNeed(NeedType type) {
-        return needs_.at(type);
-    }
-
+    const Need& getNeed(NeedType type) const { return needs_.at(type); }
+    Need& getNeed(NeedType type) { return needs_.at(type); }
     const std::map<NeedType, Need>& needs() const { return needs_; }
     const std::vector<EmotionState>& emotions() const { return emotions_; }
 
-    // Decision modifiers: how emotions/needs affect behavior weights
     float getCombatModifier() const {
         float mod = 1.0f;
         float safety = needs_.at(NeedType::Safety).value / 100.0f;
-        mod *= (0.5f + safety * 0.5f);
+        mod *= (config_.combatSafetyBase + safety * config_.combatSafetyScale);
 
         for (const auto& e : emotions_) {
             if (e.type == EmotionType::Angry) {
-                mod *= (1.0f + e.intensity * 0.3f * angerIntensityMod_);
+                mod *= (1.0f + e.intensity * config_.angerCombatBoost * angerIntensityMod_);
             }
             if (e.type == EmotionType::Fearful) {
-                mod *= (1.0f - e.intensity * 0.4f * fearIntensityMod_);
+                mod *= (1.0f - e.intensity * config_.fearCombatPenalty * fearIntensityMod_);
             }
         }
-        return std::clamp(mod, 0.1f, 2.0f);
+        return std::clamp(mod, config_.combatModMin, config_.combatModMax);
     }
 
     float getSocialModifier() const {
         float social = needs_.at(NeedType::Social).urgency();
-        float mod = 0.5f + social * 0.5f;
-        if (mood_ > 0.2f) mod *= 1.2f;
-        if (mood_ < -0.3f) mod *= 0.7f;
-        return std::clamp(mod, 0.1f, 2.0f);
+        float mod = config_.socialBase + social * config_.socialScale;
+        if (mood_ > config_.positiveMoodThreshold) mod *= config_.positiveMoodBoost;
+        if (mood_ < config_.negativeMoodThreshold) mod *= config_.negativeMoodPenalty;
+        return std::clamp(mod, config_.socialModMin, config_.socialModMax);
     }
 
     float getFleeModifier() const {
@@ -192,24 +229,23 @@ public:
             if (e.type == EmotionType::Fearful) mod += e.intensity;
         }
         float safety = 1.0f - needs_.at(NeedType::Safety).value / 100.0f;
-        mod += safety * 0.5f;
+        mod += safety * config_.fleeSafetyWeight;
         mod *= fearIntensityMod_;
         return std::clamp(mod, 0.0f, 1.0f);
     }
 
 private:
     void updateMood() {
-        // Mood = weighted average of need satisfaction + emotional influence
         float needScore = 0.0f;
         float totalWeight = 0.0f;
         for (const auto& [type, need] : needs_) {
             float w = 1.0f;
-            if (type == NeedType::Safety) w = 2.0f;
-            if (type == NeedType::Hunger || type == NeedType::Sleep) w = 1.5f;
+            if (type == NeedType::Safety) w = config_.moodSafetyWeight;
+            if (type == NeedType::Hunger || type == NeedType::Sleep) w = config_.moodHungerSleepWeight;
             needScore += (need.value / 100.0f) * w;
             totalWeight += w;
         }
-        needScore = (needScore / totalWeight) * 2.0f - 1.0f; // map to [-1, 1]
+        needScore = (needScore / totalWeight) * 2.0f - 1.0f;
 
         float emotionScore = 0.0f;
         for (const auto& e : emotions_) {
@@ -229,7 +265,7 @@ private:
             emotionScore /= static_cast<float>(emotions_.size());
         }
 
-        float emotionWeight = 0.4f * moodStabilityMod_;
+        float emotionWeight = config_.baseEmotionWeight * moodStabilityMod_;
         float needWeight = 1.0f - emotionWeight;
         mood_ = std::clamp(needScore * needWeight + emotionScore * emotionWeight, -1.0f, 1.0f);
     }

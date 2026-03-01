@@ -10,6 +10,22 @@
 
 namespace npc {
 
+struct TradeConfig {
+    float defaultBuyMarkup = 1.3f;
+    float defaultSellMarkdown = 0.6f;
+    int scarcityThreshold = 2;
+    float scarcityPriceIncrease = 0.5f;
+    float barterFairnessRatio = 0.8f;
+    float maxRelationshipDiscount = 0.3f;
+    float outOfStockMul = 2.0f;
+    float lowStockMul = 1.5f;
+    int lowStockThreshold = 2;
+    float medStockMul = 1.1f;
+    int medStockThreshold = 5;
+    float highStockMul = 0.8f;
+    int highStockThreshold = 20;
+};
+
 struct Item {
     ItemId id;
     std::string name;
@@ -72,10 +88,16 @@ private:
 class TradeSystem {
 public:
     Inventory inventory{200.0f, 100.0f};
-    float buyMarkup = 1.3f;    // 30% markup when NPC sells
-    float sellMarkdown = 0.6f; // 40% markdown when NPC buys
+    TradeConfig tradeConfig;
+    float buyMarkup;
+    float sellMarkdown;
     float scarcityMod_ = 1.0f;
     float relDiscountMod_ = 1.0f;
+
+    TradeSystem() : TradeSystem(TradeConfig{}) {}
+
+    explicit TradeSystem(const TradeConfig& cfg)
+        : tradeConfig(cfg), buyMarkup(cfg.defaultBuyMarkup), sellMarkdown(cfg.defaultSellMarkdown) {}
 
     void applyPersonality(float buyMarkupMul, float sellMarkdownMul,
                           float scarcityMul, float relDiscountMul) {
@@ -108,8 +130,8 @@ public:
 
         // Scarcity: less stock -> higher price (personality-modulated)
         int stock = inventory.getQuantity(id);
-        if (playerBuying && stock <= 2) {
-            price *= (1.0f + 0.5f * scarcityMod_);
+        if (playerBuying && stock <= tradeConfig.scarcityThreshold) {
+            price *= (1.0f + tradeConfig.scarcityPriceIncrease * scarcityMod_);
         }
 
         // Apply markup/markdown
@@ -186,7 +208,7 @@ public:
         float offeredValue = getPrice(offered, false) * offeredQty;
         float requestedValue = getPrice(requested, true) * requestedQty;
 
-        if (offeredValue < requestedValue * 0.8f) return false; // not fair enough
+        if (offeredValue < requestedValue * tradeConfig.barterFairnessRatio) return false;
 
         if (!other.hasItem(offered, offeredQty)) return false;
         if (!inventory.hasItem(requested, requestedQty)) return false;
@@ -202,16 +224,16 @@ public:
         for (auto& [id, item] : itemDB_) {
             int stock = inventory.getQuantity(id);
             float modifier = 1.0f;
-            if (stock == 0) modifier = 2.0f;
-            else if (stock <= 2) modifier = 1.5f;
-            else if (stock <= 5) modifier = 1.1f;
-            else if (stock >= 20) modifier = 0.8f;
+            if (stock == 0) modifier = tradeConfig.outOfStockMul;
+            else if (stock <= tradeConfig.lowStockThreshold) modifier = tradeConfig.lowStockMul;
+            else if (stock <= tradeConfig.medStockThreshold) modifier = tradeConfig.medStockMul;
+            else if (stock >= tradeConfig.highStockThreshold) modifier = tradeConfig.highStockMul;
             priceModifiers_[id] = modifier;
         }
     }
 
     void setRelationshipDiscount(float discount) {
-        relationshipDiscount_ = std::clamp(discount, 0.0f, 0.3f);
+        relationshipDiscount_ = std::clamp(discount, 0.0f, tradeConfig.maxRelationshipDiscount);
     }
 
     const std::map<ItemId, Item>& itemDB() const { return itemDB_; }
