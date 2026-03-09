@@ -151,6 +151,27 @@ public:
         }
     }
 
+    int countWallsOnLine(Vec2 a, Vec2 b) const {
+        int x0 = a.gridX(), y0 = a.gridY();
+        int x1 = b.gridX(), y1 = b.gridY();
+        int walls = 0;
+
+        int dx = std::abs(x1 - x0), dy = std::abs(y1 - y0);
+        int sx = (x0 < x1) ? 1 : -1;
+        int sy = (y0 < y1) ? 1 : -1;
+        int err = dx - dy;
+
+        while (true) {
+            if (!inBounds(x0, y0) || !walkable_(x0, y0)) ++walls;
+            if (x0 == x1 && y0 == y1) break;
+
+            int e2 = 2 * err;
+            if (e2 > -dy) { err -= dy; x0 += sx; }
+            if (e2 < dx)  { err += dx; y0 += sy; }
+        }
+        return walls;
+    }
+
 private:
     bool inBounds(int x, int y) const {
         return x >= 0 && x < width_ && y >= 0 && y < height_;

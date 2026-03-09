@@ -5,9 +5,16 @@
 #include <map>
 #include <vector>
 #include <optional>
+#include <functional>
 #include <cmath>
 
 namespace npc {
+
+// Callback: returns true if line-of-sight is clear between two points
+using LoSChecker = std::function<bool(Vec2, Vec2)>;
+
+// Callback: counts solid (wall/building) cells on the line between two points
+using WallCounter = std::function<int(Vec2, Vec2)>;
 
 struct PerceptionConfig {
     float sightRange = 15.0f;
@@ -22,6 +29,7 @@ struct PerceptionConfig {
     float suspiciousAwarenessThreshold = 0.2f;
     float inCombatNoise = 0.8f;
     float defaultNoise = 0.3f;
+    float wallSoundDamping = 0.5f;  // each wall halves the effective noise
 };
 
 struct PerceivedEntity {
@@ -44,6 +52,8 @@ struct SensoryInput {
 class PerceptionSystem {
 public:
     PerceptionConfig config;
+    LoSChecker losChecker;
+    WallCounter wallCounter;
 
     void update(Vec2 ownerPos, Vec2 ownerFacing,
                 const std::vector<SensoryInput>& entities,
@@ -61,7 +71,7 @@ public:
             float dist = ownerPos.distanceTo(input.position);
 
             bool seen = canSee(ownerPos, ownerFacing, input.position, dist);
-            bool heard = canHear(dist, input.noiseLevel);
+            bool heard = canHear(ownerPos, input.position, dist, input.noiseLevel);
 
             if (!seen && !heard) continue;
 
@@ -77,7 +87,8 @@ public:
                 pe.lastSeenTime = currentTime;
             }
             if (heard) {
-                float hearContribution = input.noiseLevel * (1.0f - dist / config.hearingRange);
+                float effNoise = effectiveNoise(ownerPos, input.position, input.noiseLevel);
+                float hearContribution = effNoise * (1.0f - dist / config.hearingRange);
                 pe.awarenessValue = std::min(1.0f, pe.awarenessValue + hearContribution * config.hearingAwarenessWeight);
             }
 
@@ -103,11 +114,27 @@ public:
 
         float dot = facing.dot(toTarget);
         float halfAngleRad = (config.sightAngle / 2.0f) * (3.14159f / 180.0f);
-        return dot >= std::cos(halfAngleRad);
+        if (dot < std::cos(halfAngleRad)) return false;
+
+        // Line-of-sight occlusion check
+        if (losChecker && !losChecker(ownerPos, targetPos)) return false;
+
+        return true;
     }
 
-    bool canHear(float dist, float noiseLevel) const {
-        return dist <= config.hearingRange * noiseLevel;
+    float effectiveNoise(Vec2 ownerPos, Vec2 targetPos, float noiseLevel) const {
+        float noise = noiseLevel;
+        if (wallCounter) {
+            int walls = wallCounter(ownerPos, targetPos);
+            for (int i = 0; i < walls; ++i)
+                noise *= config.wallSoundDamping;
+        }
+        return noise;
+    }
+
+    bool canHear(Vec2 ownerPos, Vec2 targetPos, float dist, float noiseLevel) const {
+        float effNoise = effectiveNoise(ownerPos, targetPos, noiseLevel);
+        return dist <= config.hearingRange * effNoise;
     }
 
     std::vector<PerceivedEntity> getThreats() const {

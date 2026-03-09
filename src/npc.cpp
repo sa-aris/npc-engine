@@ -14,6 +14,13 @@ void NPC::update(float dt, GameWorld& world) {
     memory.update(dt);
 
     // ─── 3. Update perception ────────────────────────────────────────
+    // Lazy-init line-of-sight checkers from pathfinder
+    if (pathfinder && !perception.losChecker) {
+        auto pf = pathfinder;
+        perception.losChecker = [pf](Vec2 a, Vec2 b) { return pf->hasLineOfSight(a, b); };
+        perception.wallCounter = [pf](Vec2 a, Vec2 b) { return pf->countWallsOnLine(a, b); };
+    }
+
     std::vector<SensoryInput> sensoryInputs;
     for (const auto& other : world.npcs()) {
         if (other->id == id) continue;
