@@ -7,6 +7,7 @@
 #include "ai/fsm.hpp"
 #include "ai/behavior_tree.hpp"
 #include "ai/utility_ai.hpp"
+#include "ai/goap.hpp"
 #include "ai/blackboard.hpp"
 #include "perception/perception_system.hpp"
 #include "memory/memory_system.hpp"
@@ -62,6 +63,8 @@ public:
 
     // ─── AI Control ──────────────────────────────────────────────────
     bool useUtilityAI = false;
+    bool useGOAP = false;
+    GOAPAgent goap;
 
     // ─── Movement state ──────────────────────────────────────────────
     std::vector<Vec2> currentPath;
@@ -170,8 +173,12 @@ public:
             ss << " | MP: " << static_cast<int>(combat.stats.mana.current)
                << "/" << static_cast<int>(combat.stats.mana.max);
         }
-        ss << " | State: " << fsm.currentState()
-           << " | Mood: " << emotions.getMoodString()
+        ss << " | State: " << fsm.currentState();
+        if (useGOAP && goap.hasPlan()) {
+            ss << " | Goal: " << goap.currentGoalName()
+               << " [" << goap.currentActionName() << "]";
+        }
+        ss << " | Mood: " << emotions.getMoodString()
            << " | Traits: " << personality.traitSummary();
         return ss.str();
     }

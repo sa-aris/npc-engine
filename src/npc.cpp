@@ -93,11 +93,20 @@ void NPC::update(float dt, GameWorld& world) {
     }
 
     // ─── 6. AI Decision & Behavior ──────────────────────────────────
+    // 6a. GOAP long-term planning (runs above Utility AI)
+    if (useGOAP && !combat.inCombat) {
+        goap.update(bb);
+        if (goap.hasPlan()) {
+            bb.set<std::string>("goap_goal", goap.currentGoalName());
+            bb.set<std::string>("goap_action", goap.currentActionName());
+        }
+    }
+
+    // 6b. Utility AI evaluates all actions and picks the best
     if (useUtilityAI) {
-        // 6a. Utility AI evaluates all actions and picks the best
         auto decision = utilityAI.evaluate(bb);
         if (decision) {
-            // 6b. The action's callback sets "desired_state" on the blackboard
+            // The action's callback sets "desired_state" on the blackboard
             // which the FSM transitions pick up
             bb.set<std::string>("utility_decision", decision->actionName);
             bb.set<float>("utility_score", decision->score);

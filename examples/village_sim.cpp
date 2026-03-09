@@ -1092,6 +1092,66 @@ std::shared_ptr<NPC> createAlaric(GameWorld& world, std::shared_ptr<Pathfinder> 
         }, 1);
 
     npc->fsm.setInitialState("Idle");
+
+    // ─── GOAP: Guard long-term planning ─────────────────────────────
+    npc->useGOAP = true;
+
+    // World state builder — extracts relevant state from blackboard
+    npc->goap.worldStateBuilder = [](const Blackboard& bb) -> GOAPState {
+        GOAPState ws;
+        ws["is_fed"] = GOAPValue(bb.getOr<float>("hunger_urgency", 0.0f) < 0.5f);
+        ws["is_rested"] = GOAPValue(bb.getOr<float>("sleep_urgency", 0.0f) < 0.5f);
+        ws["area_patrolled"] = GOAPValue(false);
+        ws["village_safe"] = GOAPValue(!bb.getOr<bool>("has_threats", false));
+        ws["is_social"] = GOAPValue(bb.getOr<float>("social_urgency", 0.0f) < 0.5f);
+        auto act = bb.getOr<std::string>("scheduled_activity", "");
+        if (act == "Patrol") ws["area_patrolled"] = GOAPValue(true);
+        return ws;
+    };
+
+    // Action completion check
+    npc->goap.isActionComplete = [](const GOAPAction& action, const Blackboard& bb) -> bool {
+        float timeInState = bb.getOr<float>("time_in_state", 0.0f);
+        if (action.name == "Patrol Area") return timeInState > 0.5f;
+        if (action.name == "Eat Meal") return bb.getOr<float>("hunger_urgency", 0.0f) < 0.3f;
+        if (action.name == "Rest") return bb.getOr<float>("sleep_urgency", 0.0f) < 0.3f;
+        if (action.name == "Socialize") return timeInState > 0.3f;
+        return timeInState > 0.2f;
+    };
+
+    // FSM state setter
+    npc->goap.onActionStart = [npc = npc.get()](const std::string& fsmState, Blackboard& bb) {
+        bb.set<std::string>("goap_desired_state", fsmState);
+        (void)npc;
+    };
+
+    // Available actions
+    npc->goap.actions = {
+        {"Eat Meal",     1.0f, {}, {{"is_fed", GOAPValue(true)}}, "Eat"},
+        {"Rest",         1.0f, {}, {{"is_rested", GOAPValue(true)}}, "Sleep"},
+        {"Patrol Area",  2.0f, {{"is_fed", GOAPValue(true)}}, {{"area_patrolled", GOAPValue(true)}}, "Patrol"},
+        {"Engage Threat", 3.0f, {{"area_patrolled", GOAPValue(true)}}, {{"village_safe", GOAPValue(true)}}, "Patrol"},
+        {"Socialize",    1.5f, {{"is_fed", GOAPValue(true)}}, {{"is_social", GOAPValue(true)}}, "Socialize"},
+    };
+
+    // Goals (priority can be dynamic)
+    npc->goap.goals = {
+        {"Keep Village Safe", 10.0f, {{"village_safe", GOAPValue(true)}},
+            [](const Blackboard& bb) {
+                return bb.getOr<bool>("has_threats", false) ? 15.0f : 5.0f;
+            }},
+        {"Stay Combat Ready", 5.0f, {{"is_fed", GOAPValue(true)}, {"is_rested", GOAPValue(true)}},
+            [](const Blackboard& bb) {
+                float hunger = bb.getOr<float>("hunger_urgency", 0.0f);
+                float sleep = bb.getOr<float>("sleep_urgency", 0.0f);
+                return (hunger + sleep) * 8.0f;
+            }},
+        {"Maintain Morale", 3.0f, {{"is_social", GOAPValue(true)}},
+            [](const Blackboard& bb) {
+                return bb.getOr<float>("social_urgency", 0.0f) * 6.0f;
+            }},
+    };
+
     return npc;
 }
 
@@ -1263,6 +1323,50 @@ std::shared_ptr<NPC> createBrina(GameWorld& world, std::shared_ptr<Pathfinder> p
         }, 2);
 
     npc->fsm.setInitialState("Work");
+
+    // ─── GOAP: Blacksmith long-term planning ────────────────────────
+    npc->useGOAP = true;
+
+    npc->goap.worldStateBuilder = [](const Blackboard& bb) -> GOAPState {
+        GOAPState ws;
+        ws["is_fed"] = GOAPValue(bb.getOr<float>("hunger_urgency", 0.0f) < 0.5f);
+        ws["is_rested"] = GOAPValue(bb.getOr<float>("sleep_urgency", 0.0f) < 0.5f);
+        ws["has_produced"] = GOAPValue(false);
+        ws["is_social"] = GOAPValue(bb.getOr<float>("social_urgency", 0.0f) < 0.5f);
+        auto act = bb.getOr<std::string>("scheduled_activity", "");
+        if (act == "Work") ws["has_produced"] = GOAPValue(true);
+        return ws;
+    };
+
+    npc->goap.isActionComplete = [](const GOAPAction& action, const Blackboard& bb) -> bool {
+        float t = bb.getOr<float>("time_in_state", 0.0f);
+        if (action.name == "Forge Items") return t > 0.5f;
+        if (action.name == "Eat Meal") return bb.getOr<float>("hunger_urgency", 0.0f) < 0.3f;
+        if (action.name == "Rest") return bb.getOr<float>("sleep_urgency", 0.0f) < 0.3f;
+        return t > 0.2f;
+    };
+
+    npc->goap.onActionStart = [](const std::string&, Blackboard&) {};
+
+    npc->goap.actions = {
+        {"Eat Meal",     1.0f, {}, {{"is_fed", GOAPValue(true)}}, "Eat"},
+        {"Rest",         1.0f, {}, {{"is_rested", GOAPValue(true)}}, "Sleep"},
+        {"Forge Items",  2.0f, {{"is_fed", GOAPValue(true)}}, {{"has_produced", GOAPValue(true)}}, "Work"},
+        {"Socialize",    1.5f, {{"is_fed", GOAPValue(true)}}, {{"is_social", GOAPValue(true)}}, "Socialize"},
+    };
+
+    npc->goap.goals = {
+        {"Produce Goods", 8.0f, {{"has_produced", GOAPValue(true)}}, nullptr},
+        {"Stay Healthy", 5.0f, {{"is_fed", GOAPValue(true)}, {"is_rested", GOAPValue(true)}},
+            [](const Blackboard& bb) {
+                return (bb.getOr<float>("hunger_urgency", 0.0f) + bb.getOr<float>("sleep_urgency", 0.0f)) * 8.0f;
+            }},
+        {"Maintain Morale", 3.0f, {{"is_social", GOAPValue(true)}},
+            [](const Blackboard& bb) {
+                return bb.getOr<float>("social_urgency", 0.0f) * 6.0f;
+            }},
+    };
+
     return npc;
 }
 
