@@ -199,6 +199,39 @@ public:
     const std::map<NeedType, Need>& needs() const { return needs_; }
     const std::vector<EmotionState>& emotions() const { return emotions_; }
 
+    // ─── Emotional Contagion ────────────────────────────────────────
+    struct EmotionalAura {
+        EmotionType type = EmotionType::Neutral;
+        float intensity = 0.0f;
+    };
+
+    // Returns this NPC's dominant emotional aura for contagion
+    EmotionalAura getEmotionalAura() const {
+        if (emotions_.empty()) return {EmotionType::Neutral, 0.0f};
+        const EmotionState* strongest = &emotions_[0];
+        for (const auto& e : emotions_) {
+            if (e.intensity > strongest->intensity) strongest = &e;
+        }
+        return {strongest->type, strongest->intensity};
+    }
+
+    // Apply emotional contagion from a nearby NPC
+    // empathy: receiver's empathy multiplier (from personality)
+    // proximity: 0.0 (far) to 1.0 (very close)
+    void applyContagion(EmotionType type, float sourceIntensity,
+                        float empathy, float proximity) {
+        if (type == EmotionType::Neutral) return;
+        if (sourceIntensity < 0.1f) return;
+
+        // Contagion strength: source intensity * empathy * proximity falloff
+        float strength = sourceIntensity * empathy * proximity * contagionScale_;
+        if (strength < 0.01f) return;
+
+        addEmotion(type, strength, 0.5f); // short-lived contagion emotions
+    }
+
+    float contagionScale_ = 0.3f; // global contagion dampener
+
     float getCombatModifier() const {
         float mod = 1.0f;
         float safety = needs_.at(NeedType::Safety).value / 100.0f;

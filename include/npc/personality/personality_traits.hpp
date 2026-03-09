@@ -132,6 +132,12 @@ struct PersonalityTraits {
         return 0.7f + intelligence * 0.6f;
     }
 
+    // Emotional contagion sensitivity. Range: [0.2, 1.0].
+    // High sociability = more susceptible to others' emotions.
+    float empathyMultiplier() const {
+        return 0.2f + sociability * 0.8f;
+    }
+
     // --- Display ---
 
     std::string toString() const {

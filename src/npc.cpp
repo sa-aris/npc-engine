@@ -10,6 +10,20 @@ void NPC::update(float dt, GameWorld& world) {
     // ─── 1. Update needs & emotions ──────────────────────────────────
     emotions.update(dt);
 
+    // ─── 1b. Emotional contagion from nearby NPCs ───────────────────
+    float empathy = personality.empathyMultiplier();
+    float contagionRange = perception.config.hearingRange;
+    for (const auto& other : world.npcs()) {
+        if (other->id == id) continue;
+        if (!other->combat.stats.isAlive()) continue;
+        float dist = position.distanceTo(other->position);
+        if (dist > contagionRange) continue;
+
+        float proximity = 1.0f - (dist / contagionRange);
+        auto aura = other->emotions.getEmotionalAura();
+        emotions.applyContagion(aura.type, aura.intensity, empathy, proximity);
+    }
+
     // ─── 2. Update memory ────────────────────────────────────────────
     memory.update(dt);
 
