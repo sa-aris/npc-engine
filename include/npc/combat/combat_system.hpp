@@ -25,6 +25,27 @@ struct ResourcePool {
     void regen(float amount) { current = std::min(max, current + amount); }
 };
 
+// ─── Damage Resistances ─────────────────────────────────────────────
+// Multiplier per damage type: <1.0 = resistant, 1.0 = normal, >1.0 = weak
+struct DamageResistances {
+    float physical = 1.0f;
+    float magical = 1.0f;
+    float fire = 1.0f;
+    float ice = 1.0f;
+    float poison = 1.0f;
+
+    float get(DamageType type) const {
+        switch (type) {
+            case DamageType::Physical: return physical;
+            case DamageType::Magical:  return magical;
+            case DamageType::Fire:     return fire;
+            case DamageType::Ice:      return ice;
+            case DamageType::Poison:   return poison;
+        }
+        return 1.0f;
+    }
+};
+
 struct CombatConfig {
     float passiveRegenRate = 1.0f;
     float awarenessThreatMul = 50.0f;
@@ -65,6 +86,7 @@ struct CombatStats {
     std::vector<Ability> abilities;
     ResourcePool stamina{100.0f, 100.0f, 5.0f, 15.0f};
     ResourcePool mana{0.0f, 0.0f, 3.0f, 10.0f};
+    DamageResistances resistances;
 
     float healthPercent() const {
         return maxHealth > 0.0f ? health / maxHealth : 0.0f;
@@ -171,12 +193,14 @@ public:
         float damageDealt;
         bool isCrit;
         bool targetKilled;
+        float resistanceMultiplier;
     };
 
     DamageResult dealDamage(CombatSystem& target, const Ability& ability) {
         bool crit = Random::instance().chance(stats.critChance);
         float dmg = (stats.attack + ability.damage) * (crit ? combatConfig.critMultiplier : 1.0f);
-        float mitigated = std::max(1.0f, dmg - target.stats.defense * combatConfig.defenseMitigation);
+        float resMul = target.stats.resistances.get(ability.damageType);
+        float mitigated = std::max(1.0f, dmg * resMul - target.stats.defense * combatConfig.defenseMitigation);
 
         target.stats.health -= mitigated;
         bool killed = target.stats.health <= 0.0f;
@@ -193,7 +217,7 @@ public:
             }
         }
 
-        return {mitigated, crit, killed};
+        return {mitigated, crit, killed, resMul};
     }
 
     float heal(const Ability& ability) {

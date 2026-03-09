@@ -596,8 +596,10 @@ void setupCombatBT(NPC& npc, GameWorld& world) {
                             std::cout << "[" << formatTime(bb.getOr<float>("_time", 0.0f))
                                       << "] " << npc.name << " uses Sword Strike on "
                                       << enemy->name << "! " << static_cast<int>(result.damageDealt)
-                                      << " damage" << (result.isCrit ? " (CRIT!)" : "") << ". "
-                                      << enemy->name << " HP: "
+                                      << " damage" << (result.isCrit ? " (CRIT!)" : "");
+                            if (result.resistanceMultiplier < 0.9f) std::cout << " (RESISTED)";
+                            else if (result.resistanceMultiplier > 1.1f) std::cout << " (WEAK!)";
+                            std::cout << ". " << enemy->name << " HP: "
                                       << static_cast<int>(enemy->combat.stats.health) << "/"
                                       << static_cast<int>(enemy->combat.stats.maxHealth) << "\n";
                             if (result.targetKilled) {
@@ -639,7 +641,10 @@ void setupCombatBT(NPC& npc, GameWorld& world) {
                         std::cout << "[" << formatTime(bb.getOr<float>("_time", 0.0f))
                                   << "] " << npc.name << " uses Shield Bash on "
                                   << enemy->name << "! " << static_cast<int>(result.damageDealt)
-                                  << " damage. " << enemy->name << " HP: "
+                                  << " damage";
+                        if (result.resistanceMultiplier < 0.9f) std::cout << " (RESISTED)";
+                        else if (result.resistanceMultiplier > 1.1f) std::cout << " (WEAK!)";
+                        std::cout << ". " << enemy->name << " HP: "
                                   << static_cast<int>(enemy->combat.stats.health) << "/"
                                   << static_cast<int>(enemy->combat.stats.maxHealth) << "\n";
                         if (result.targetKilled) {
@@ -799,7 +804,10 @@ void runCombatRound(GameWorld& world, const std::string& timeStr) {
                 auto result = wolf->combat.dealDamage(nearest->combat, *ability);
                 std::cout << "[" << timeStr << "] " << wolf->name << " bites "
                           << nearest->name << "! " << static_cast<int>(result.damageDealt)
-                          << " damage. " << nearest->name << " HP: "
+                          << " damage";
+                if (result.resistanceMultiplier < 0.9f) std::cout << " (RESISTED)";
+                else if (result.resistanceMultiplier > 1.1f) std::cout << " (WEAK!)";
+                std::cout << ". " << nearest->name << " HP: "
                           << static_cast<int>(nearest->combat.stats.health) << "/"
                           << static_cast<int>(nearest->combat.stats.maxHealth) << "\n";
             }
@@ -847,8 +855,10 @@ void runCombatRound(GameWorld& world, const std::string& timeStr) {
                     auto result = brina->combat.dealDamage(wolf->combat, *ability);
                     std::cout << "[" << timeStr << "] " << brina->name
                               << " uses Hammer Strike on " << wolf->name << "! "
-                              << static_cast<int>(result.damageDealt) << " damage. "
-                              << wolf->name << " HP: "
+                              << static_cast<int>(result.damageDealt) << " damage";
+                    if (result.resistanceMultiplier < 0.9f) std::cout << " (RESISTED)";
+                    else if (result.resistanceMultiplier > 1.1f) std::cout << " (WEAK!)";
+                    std::cout << ". " << wolf->name << " HP: "
                               << static_cast<int>(wolf->combat.stats.health) << "/"
                               << static_cast<int>(wolf->combat.stats.maxHealth) << "\n";
                     if (result.targetKilled) {
@@ -923,9 +933,10 @@ std::shared_ptr<NPC> createAlaric(GameWorld& world, std::shared_ptr<Pathfinder> 
     npc->memory = MemorySystem(static_cast<size_t>(50 * npc->personality.memoryCapacityMultiplier()));
     npc->schedule = ScheduleSystem::createGuardSchedule();
 
-    // Combat stats - strong fighter
+    // Combat stats - strong fighter with plate armor
     npc->combat.stats = {120.0f, 120.0f, 20.0f, 15.0f, 6.0f, 0.15f, {}};
     npc->combat.stats.stamina = {120.0f, 120.0f, 6.0f, 18.0f};
+    npc->combat.stats.resistances = {0.6f, 1.0f, 1.2f, 1.0f, 0.8f}; // Plate: Physical-resistant, Fire-weak
     npc->combat.stats.abilities.push_back(
         {"Sword Strike", AbilityType::Melee, DamageType::Physical, 15.0f, 2.0f, 0.05f, 0.0f, 0.0f, 0.0f, 10.0f});
     npc->combat.stats.abilities.push_back(
@@ -1102,6 +1113,7 @@ std::shared_ptr<NPC> createBrina(GameWorld& world, std::shared_ptr<Pathfinder> p
 
     npc->combat.stats = {80.0f, 80.0f, 15.0f, 10.0f, 4.0f, 0.1f, {}};
     npc->combat.stats.stamina = {100.0f, 100.0f, 5.0f, 15.0f};
+    npc->combat.stats.resistances = {0.8f, 1.0f, 0.6f, 1.0f, 1.0f}; // Blacksmith: Fire-resistant
     npc->combat.stats.abilities.push_back(
         {"Hammer Strike", AbilityType::Melee, DamageType::Physical, 12.0f, 1.5f, 0.08f, 0.0f, 0.0f, 0.0f, 12.0f});
 
@@ -1937,6 +1949,8 @@ void scheduleWorldEvents(GameWorld& world, FactionSystem& factions,
                 wolf->combat.stats = {30.0f, 30.0f, 9.0f, 2.0f, 6.0f, 0.05f, {}};
                 wolf->combat.stats.stamina = {50.0f, 50.0f, 4.0f, 0.0f};
             }
+            // Wolves: Ice-weak, Poison-resistant (natural fur)
+            wolf->combat.stats.resistances = {1.0f, 1.0f, 0.8f, 1.5f, 0.7f};
             wolf->combat.stats.abilities.push_back(
                 {"Bite", AbilityType::Melee, DamageType::Physical, 10.0f, 3.0f, 0.03f, 0.0f, 0.0f, 0.0f, 8.0f});
 
