@@ -32,7 +32,6 @@ void NPC::update(float dt, GameWorld& world) {
     if (pathfinder && !perception.losChecker) {
         auto pf = pathfinder;
         perception.losChecker = [pf](Vec2 a, Vec2 b) { return pf->hasLineOfSight(a, b); };
-        perception.wallCounter = [pf](Vec2 a, Vec2 b) { return pf->countWallsOnLine(a, b); };
     }
 
     std::vector<SensoryInput> sensoryInputs;
@@ -100,7 +99,7 @@ void NPC::update(float dt, GameWorld& world) {
     bb.set<float>("trait_intelligence", personality.intelligence);
 
     // Schedule info
-    auto currentActivity = schedule.getCurrentActivity(world.time().currentHour());
+    auto currentActivity = schedule.getCurrentActivity(world.time().currentHour(), DayOfWeek::Monday);
     if (currentActivity) {
         bb.set<std::string>("scheduled_activity", activityToString(currentActivity->activity));
         bb.set<std::string>("scheduled_location", currentActivity->location);
