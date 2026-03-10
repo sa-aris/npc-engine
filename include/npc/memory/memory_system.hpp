@@ -51,7 +51,9 @@ namespace gossip {
 }
 
 // ─── MemorySystem ─────────────────────────────────────────────────────────────
+struct NpcSerializer; // serialization friend
 class MemorySystem {
+    friend struct NpcSerializer;
 public:
     explicit MemorySystem(size_t maxMemories = 100)
         : maxMemories_(maxMemories) {}
