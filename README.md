@@ -6,6 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Header-only](https://img.shields.io/badge/header--only-yes-green.svg)](#integration)
 [![WebAssembly](https://img.shields.io/badge/WebAssembly-WASM-654FF0)](https://webassembly.org/)
+[![Lua](https://img.shields.io/badge/Lua-5.4-2C2D72?logo=lua)](https://www.lua.org/)
 
 A self-contained NPC AI framework for games, written in C++17. Drop the `include/` directory into any project and you get 20 interconnected systems — from low-level pathfinding and spatial queries to high-level faction politics, relationship history, and narrative-aware dialogue hooks.
 
@@ -254,6 +255,44 @@ cmake --build build --parallel
 
 **Requirements:** C++17 (GCC 9+, Clang 10+, MSVC 19.20+), CMake 3.16+
 
+### Lua scripting bridge
+
+Requires Lua 5.4. On Ubuntu: `sudo apt install liblua5.4-dev`
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DNPC_LUA_BRIDGE=ON
+cmake --build build --target lua_village
+./build/lua_village examples/scripts
+```
+
+NPC behaviours are defined entirely in Lua — no C++ FSM lambdas required:
+
+```lua
+-- examples/scripts/guard.lua
+function guard_enter_combat(npc)
+    npc:log("Enemy spotted! Drawing sword!")
+    npc:addEmotion("Angry", 0.9, 4.0)
+    npc:depletNeed("Safety", 30.0)
+    npc:rememberEvent("Entered combat", -0.6)
+end
+
+function guard_update_combat(npc, dt)
+    if npc:getHealthPercent() <= 0.25 then
+        npc:setState("flee")
+    end
+end
+```
+
+```cpp
+// C++ side — one call wires the Lua function into the FSM
+bridge.addLuaState(guard->fsm, "combat", guard.get(),
+                   "guard_update_combat",
+                   "guard_enter_combat",
+                   "guard_exit_combat");
+```
+
+The bridge exposes a full NPC API to Lua: position, health, emotions, needs, blackboard keys, FSM transitions, memory, movement, and `world_time()` / `world_hour()` globals. If Lua 5.4 is not installed, the bridge target is silently skipped and the rest of the build is unaffected.
+
 ### Run the demo
 
 ```bash
@@ -427,6 +466,7 @@ NPC/
 │   │                   simulation_manager, world_event_manager
 │   ├── threading/      thread_safety, task_scheduler, parallel_ticker
 │   ├── serialization/  json, npc_serializer
+│   ├── scripting/      lua_bridge — Lua 5.4 scripting bridge
 │   └── npc.hpp         main NPC composite class
 ├── src/
 │   ├── npc.cpp
@@ -435,7 +475,11 @@ NPC/
 ├── web/
 │   └── index.html      — single-file browser demo (dark terminal theme, WebAssembly)
 ├── examples/
-│   └── village_sim.cpp — full medieval village demo with contagion/decay/influence output
+│   ├── village_sim.cpp        — full medieval village demo with contagion/decay/influence output
+│   ├── lua_village.cpp        — Lua scripting demo (zero C++ FSM lambdas)
+│   └── scripts/
+│       ├── guard.lua           — guard FSM: patrol/alert/combat/flee/recover
+│       └── merchant.lua        — merchant schedule: open/lunch/closed/worried
 ├── tests/
 │   ├── test_runner.hpp — zero-dependency test framework
 │   └── run_tests.cpp   — test suite (~75 tests)
