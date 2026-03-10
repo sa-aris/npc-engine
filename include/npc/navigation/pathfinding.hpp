@@ -25,6 +25,7 @@
 #include <optional>
 #include <memory>
 #include <cassert>
+#include <list>
 
 namespace npc {
 
