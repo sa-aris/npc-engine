@@ -1529,24 +1529,24 @@ std::shared_ptr<NPC> createDagna(GameWorld& world, std::shared_ptr<Pathfinder> p
     root.friendlyText = "Ah, my favorite customer! The usual?";
     root.hostileText = "What do you want? Make it quick.";
     root.options = {
-        {"I'd like some bread and ale.", "serve", nullptr, nullptr, -100},
-        {"Any news from the village?", "gossip", nullptr, nullptr, -100},
-        {"Just passing through.", "END", nullptr, nullptr, -100}
+        {"I'd like some bread and ale.", "serve", nullptr, -100},
+        {"Any news from the village?", "gossip", nullptr, -100},
+        {"Just passing through.", "END", nullptr, -100}
     };
     greetTree.addNode(root);
 
     DialogNode serveNode;
     serveNode.id = "serve";
     serveNode.speakerText = "Coming right up! That'll be 8 gold.";
-    serveNode.options = {{"Thanks!", "END", nullptr, nullptr, -100}};
+    serveNode.options = {{"Thanks!", "END", nullptr, -100}};
     greetTree.addNode(serveNode);
 
     DialogNode gossipNode;
     gossipNode.id = "gossip";
     gossipNode.speakerText = "I heard wolves have been spotted near the forest. Be careful out there!";
     gossipNode.options = {
-        {"I'll keep my eyes open. Thanks.", "END", nullptr, nullptr, -100},
-        {"Wolves? Maybe I should talk to the guard.", "END", nullptr, nullptr, -100}
+        {"I'll keep my eyes open. Thanks.", "END", nullptr, -100},
+        {"Wolves? Maybe I should talk to the guard.", "END", nullptr, -100}
     };
     greetTree.addNode(gossipNode);
     npc->dialog.addTree("greeting", std::move(greetTree));
