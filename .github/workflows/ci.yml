@@ -32,20 +32,26 @@ jobs:
 
       - name: Install GCC 12 (Ubuntu)
         if: matrix.compiler == 'gcc-12'
-        run: sudo apt-get install -y g++-12
+        run: sudo apt-get install -y g++-12 liblua5.4-dev
 
       - name: Install Clang 15 (Ubuntu)
         if: matrix.compiler == 'clang-15'
         run: |
-          sudo apt-get install -y clang-15
+          sudo apt-get install -y clang-15 liblua5.4-dev
           sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-15 100
           sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-15 100
+
+      - name: Install Lua (macOS)
+        if: matrix.os == 'macos-14'
+        run: |
+          brew install lua
+          echo "PKG_CONFIG_PATH=$(brew --prefix lua)/lib/pkgconfig" >> $GITHUB_ENV
 
       - name: Configure
         env:
           CC: ${{ matrix.cc }}
           CXX: ${{ matrix.cxx }}
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DNPC_LUA_BRIDGE=ON
 
       - name: Build
         run: cmake --build build --parallel
