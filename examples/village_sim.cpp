@@ -140,16 +140,16 @@ int main() {
     setupCombatBT(*alaric, world);
 
     // --- Initialize relationships ---
-    g_relationships.setRelationship(alaric->id, brina->id, 40.0f);
-    g_relationships.setRelationship(alaric->id, cedric->id, 25.0f);
-    g_relationships.setRelationship(alaric->id, dagna->id, 35.0f);
-    g_relationships.setRelationship(alaric->id, elmund->id, 20.0f);
-    g_relationships.setRelationship(brina->id, cedric->id, 30.0f);
-    g_relationships.setRelationship(brina->id, dagna->id, 45.0f);
-    g_relationships.setRelationship(brina->id, elmund->id, 25.0f);
-    g_relationships.setRelationship(cedric->id, dagna->id, 35.0f);
-    g_relationships.setRelationship(cedric->id, elmund->id, 30.0f);
-    g_relationships.setRelationship(dagna->id, elmund->id, 40.0f);
+    g_relationships.setValue(std::to_string(alaric->id), std::to_string(brina->id), 40.0f);
+    g_relationships.setValue(std::to_string(alaric->id), std::to_string(cedric->id), 25.0f);
+    g_relationships.setValue(std::to_string(alaric->id), std::to_string(dagna->id), 35.0f);
+    g_relationships.setValue(std::to_string(alaric->id), std::to_string(elmund->id), 20.0f);
+    g_relationships.setValue(std::to_string(brina->id), std::to_string(cedric->id), 30.0f);
+    g_relationships.setValue(std::to_string(brina->id), std::to_string(dagna->id), 45.0f);
+    g_relationships.setValue(std::to_string(brina->id), std::to_string(elmund->id), 25.0f);
+    g_relationships.setValue(std::to_string(cedric->id), std::to_string(dagna->id), 35.0f);
+    g_relationships.setValue(std::to_string(cedric->id), std::to_string(elmund->id), 30.0f);
+    g_relationships.setValue(std::to_string(dagna->id), std::to_string(elmund->id), 40.0f);
 
     // --- Schedule world events ---
     scheduleWorldEvents(world, factions, pathfinder);
@@ -220,7 +220,7 @@ int main() {
         for (const auto& other : world.npcs()) {
             if (other->id == npc->id || other->type == NPCType::Enemy) continue;
             if (other->name == "Farhan") continue;
-            float rel = g_relationships.getRelationship(npc->id, other->id);
+            float rel = g_relationships.getValue(std::to_string(npc->id), std::to_string(other->id));
             if (std::abs(rel) > 1.0f) {
                 std::cout << other->name << "=" << static_cast<int>(rel) << " ";
             }
@@ -697,9 +697,9 @@ void logRelationship(const std::string& timeStr, const std::string& a,
         adjustedDelta *= avgPatMul;
     }
 
-    float before = g_relationships.getRelationship(idA, idB);
-    g_relationships.modifyRelationship(idA, idB, adjustedDelta);
-    float after = g_relationships.getRelationship(idA, idB);
+    float before = g_relationships.getValue(std::to_string(idA), std::to_string(idB));
+    g_relationships.modifyValue(std::to_string(idA), std::to_string(idB), adjustedDelta);
+    float after = g_relationships.getValue(std::to_string(idA), std::to_string(idB));
     std::cout << "[" << timeStr << "] " << a << "-" << b << " relationship: "
               << static_cast<int>(before) << " -> " << static_cast<int>(after)
               << " (" << (adjustedDelta >= 0 ? "+" : "")
@@ -2243,7 +2243,7 @@ void scheduleWorldEvents(GameWorld& world, FactionSystem& factions,
                 if (b->id <= a->id) continue;
                 if (b->type == NPCType::Enemy || !b->combat.stats.isAlive()) continue;
                 if (b->name == "Farhan") continue;
-                g_relationships.modifyRelationship(a->id, b->id, 5.0f);
+                g_relationships.modifyValue(std::to_string(a->id), std::to_string(b->id), 5.0f);
             }
             a->emotions.satisfyNeed(NeedType::Social, 20.0f);
         }
@@ -2356,7 +2356,7 @@ void scheduleWorldEvents(GameWorld& world, FactionSystem& factions,
                 if (b->id <= a->id) continue;
                 if (b->type == NPCType::Enemy || !b->combat.stats.isAlive()) continue;
                 if (b->name == "Farhan") continue;
-                g_relationships.modifyRelationship(a->id, b->id, 2.0f);
+                g_relationships.modifyValue(std::to_string(a->id), std::to_string(b->id), 2.0f);
             }
         }
     });
