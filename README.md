@@ -577,6 +577,16 @@ NPC/
 
 ---
 
+## A note
+
+This project is free and always will be — for students learning game development, for developers who can't get funding, and for anyone building something they care about without enough time in the day. If this saves you a week of work, that's enough.
+
+If you build something with it, I'd genuinely love to hear about it.
+
+**Contact:** solus.aris@proton.me
+
+---
+
 ## License
 
 [MIT](LICENSE)
