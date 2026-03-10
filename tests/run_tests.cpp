@@ -23,65 +23,63 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST("JSON: parse null") {
-    auto v = npc::json::parse("null");
-    ASSERT_TRUE(std::holds_alternative<std::nullptr_t>(v));
+    auto v = npc::serial::parse("null");
+    ASSERT_TRUE(v.isNull());
 }
 
 TEST("JSON: parse bool true") {
-    ASSERT_EQ(std::get<bool>(npc::json::parse("true")), true);
+    ASSERT_EQ(npc::serial::parse("true").asBool(), true);
 }
 
 TEST("JSON: parse bool false") {
-    ASSERT_EQ(std::get<bool>(npc::json::parse("false")), false);
+    ASSERT_EQ(npc::serial::parse("false").asBool(), false);
 }
 
 TEST("JSON: parse integer") {
-    ASSERT_EQ(std::get<int64_t>(npc::json::parse("42")), int64_t(42));
+    ASSERT_EQ(npc::serial::parse("42").asInt(), int64_t(42));
 }
 
 TEST("JSON: parse negative integer") {
-    ASSERT_EQ(std::get<int64_t>(npc::json::parse("-17")), int64_t(-17));
+    ASSERT_EQ(npc::serial::parse("-17").asInt(), int64_t(-17));
 }
 
 TEST("JSON: parse double") {
-    ASSERT_NEAR(std::get<double>(npc::json::parse("3.14")), 3.14, 1e-9);
+    ASSERT_NEAR(npc::serial::parse("3.14").asDouble(), 3.14, 1e-9);
 }
 
 TEST("JSON: parse string") {
-    ASSERT_EQ(std::get<std::string>(npc::json::parse("\"hello world\"")),
-              "hello world");
+    ASSERT_EQ(npc::serial::parse("\"hello world\"").asString(), "hello world");
 }
 
 TEST("JSON: parse empty array") {
-    auto v = npc::json::parse("[]");
-    ASSERT_TRUE(std::holds_alternative<npc::json::JsonArray>(v));
-    ASSERT_EQ(std::get<npc::json::JsonArray>(v).size(), std::size_t(0));
+    auto v = npc::serial::parse("[]");
+    ASSERT_TRUE(v.isArray());
+    ASSERT_EQ(v.asArray().size(), std::size_t(0));
 }
 
 TEST("JSON: parse array of ints") {
-    auto v   = npc::json::parse("[1,2,3]");
-    auto& arr = std::get<npc::json::JsonArray>(v);
+    auto v   = npc::serial::parse("[1,2,3]");
+    auto& arr = v.asArray();
     ASSERT_EQ(arr.size(), std::size_t(3));
-    ASSERT_EQ(std::get<int64_t>(arr[0]), int64_t(1));
-    ASSERT_EQ(std::get<int64_t>(arr[2]), int64_t(3));
+    ASSERT_EQ(arr[0].asInt(), int64_t(1));
+    ASSERT_EQ(arr[2].asInt(), int64_t(3));
 }
 
 TEST("JSON: parse nested object") {
-    auto v   = npc::json::parse("{\"name\":\"Aria\",\"level\":5}");
-    auto& obj = std::get<npc::json::JsonObject>(v);
-    ASSERT_EQ(std::get<std::string>(obj.at("name")), "Aria");
-    ASSERT_EQ(std::get<int64_t>(obj.at("level")), int64_t(5));
+    auto v = npc::serial::parse("{\"name\":\"Aria\",\"level\":5}");
+    ASSERT_EQ(v["name"].asString(), "Aria");
+    ASSERT_EQ(v["level"].asInt(), int64_t(5));
 }
 
 TEST("JSON: roundtrip") {
-    auto v  = npc::json::parse("{\"a\":1,\"b\":[2,3],\"c\":null}");
-    auto v2 = npc::json::parse(npc::json::toString(v));
-    ASSERT_EQ(npc::json::toString(v), npc::json::toString(v2));
+    auto v  = npc::serial::parse("{\"a\":1,\"b\":[2,3],\"c\":null}");
+    auto v2 = npc::serial::parse(npc::serial::toString(v));
+    ASSERT_EQ(npc::serial::toString(v), npc::serial::toString(v2));
 }
 
 TEST("JSON: toString pretty smoke") {
-    auto v = npc::json::parse("[1,[2,3],{\"x\":true}]");
-    std::string pretty = npc::json::toString(v, true);
+    auto v = npc::serial::parse("[1,[2,3],{\"x\":true}]");
+    std::string pretty = npc::serial::toString(v, true);
     ASSERT_FALSE(pretty.empty());
     ASSERT_TRUE(pretty.find('\n') != std::string::npos);
 }
