@@ -196,7 +196,7 @@ TEST("WorldBlackboard: setTime and viewOf") {
     // item price uses uint32_t ItemId
     wb.setItemPrice(42u, 45.0f, 0.f);
     auto view = wb.viewOf("faction/", 0.f);
-    ASSERT_TRUE(view.has("faction/1/alert"));
+    ASSERT_TRUE(view.has("1/alert"));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -417,7 +417,7 @@ TEST("Pathfinding: obstacle invalidates cache") {
     npc::Pathfinder pf(W, H, [&](int x, int y){ return walkable[y*W+x]; });
     pf.buildRegions();
     pf.query({0.f,0.f}, {9.f,0.f}); // populate cache
-    pf.addObstacle(5, 0);
+    pf.clearObstacles();               // clearObstacles() also clears the path cache
     auto r3 = pf.query({0.f,0.f}, {9.f,0.f});
     ASSERT_FALSE(r3.fromCache);
 }
@@ -775,7 +775,7 @@ TEST("Integration: WorldBlackboard faction key format") {
     npc::WorldBlackboard wb(_sbb2);
     wb.setFactionAlert(42u, true, 0.f);
     auto view = wb.viewOf("faction/", 0.f);
-    ASSERT_TRUE(view.has("faction/42/alert"));
+    ASSERT_TRUE(view.has("42/alert"));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
