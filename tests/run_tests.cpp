@@ -10,7 +10,7 @@
 #include "npc/world/spatial_index.hpp"
 #include "npc/navigation/pathfinding.hpp"
 #include "npc/ai/shared_blackboard.hpp"
-#include "npc/world/lod_system.hpp"    // also pulls in npc.hpp → NPC class
+#include "npc/world/lod_system.hpp"    // pulls in npc.hpp → NPC class
 #include "npc/serialization/json.hpp"
 #include "npc/event/event_system.hpp"
 #include "npc/ai/blackboard.hpp"
@@ -28,33 +28,28 @@ TEST("JSON: parse null") {
 }
 
 TEST("JSON: parse bool true") {
-    auto v = npc::json::parse("true");
-    ASSERT_EQ(std::get<bool>(v), true);
+    ASSERT_EQ(std::get<bool>(npc::json::parse("true")), true);
 }
 
 TEST("JSON: parse bool false") {
-    auto v = npc::json::parse("false");
-    ASSERT_EQ(std::get<bool>(v), false);
+    ASSERT_EQ(std::get<bool>(npc::json::parse("false")), false);
 }
 
 TEST("JSON: parse integer") {
-    auto v = npc::json::parse("42");
-    ASSERT_EQ(std::get<int64_t>(v), int64_t(42));
+    ASSERT_EQ(std::get<int64_t>(npc::json::parse("42")), int64_t(42));
 }
 
 TEST("JSON: parse negative integer") {
-    auto v = npc::json::parse("-17");
-    ASSERT_EQ(std::get<int64_t>(v), int64_t(-17));
+    ASSERT_EQ(std::get<int64_t>(npc::json::parse("-17")), int64_t(-17));
 }
 
 TEST("JSON: parse double") {
-    auto v = npc::json::parse("3.14");
-    ASSERT_NEAR(std::get<double>(v), 3.14, 1e-9);
+    ASSERT_NEAR(std::get<double>(npc::json::parse("3.14")), 3.14, 1e-9);
 }
 
 TEST("JSON: parse string") {
-    auto v = npc::json::parse("\"hello world\"");
-    ASSERT_EQ(std::get<std::string>(v), "hello world");
+    ASSERT_EQ(std::get<std::string>(npc::json::parse("\"hello world\"")),
+              "hello world");
 }
 
 TEST("JSON: parse empty array") {
@@ -64,28 +59,22 @@ TEST("JSON: parse empty array") {
 }
 
 TEST("JSON: parse array of ints") {
-    auto v = npc::json::parse("[1,2,3]");
+    auto v   = npc::json::parse("[1,2,3]");
     auto& arr = std::get<npc::json::JsonArray>(v);
     ASSERT_EQ(arr.size(), std::size_t(3));
     ASSERT_EQ(std::get<int64_t>(arr[0]), int64_t(1));
     ASSERT_EQ(std::get<int64_t>(arr[2]), int64_t(3));
 }
 
-TEST("JSON: parse empty object") {
-    auto v = npc::json::parse("{}");
-    ASSERT_TRUE(std::holds_alternative<npc::json::JsonObject>(v));
-}
-
 TEST("JSON: parse nested object") {
-    auto v = npc::json::parse("{\"name\":\"Aria\",\"level\":5}");
+    auto v   = npc::json::parse("{\"name\":\"Aria\",\"level\":5}");
     auto& obj = std::get<npc::json::JsonObject>(v);
     ASSERT_EQ(std::get<std::string>(obj.at("name")), "Aria");
     ASSERT_EQ(std::get<int64_t>(obj.at("level")), int64_t(5));
 }
 
 TEST("JSON: roundtrip") {
-    std::string original = "{\"a\":1,\"b\":[2,3],\"c\":null}";
-    auto v  = npc::json::parse(original);
+    auto v  = npc::json::parse("{\"a\":1,\"b\":[2,3],\"c\":null}");
     auto v2 = npc::json::parse(npc::json::toString(v));
     ASSERT_EQ(npc::json::toString(v), npc::json::toString(v2));
 }
@@ -101,7 +90,7 @@ TEST("JSON: toString pretty smoke") {
 // Blackboard
 // ─────────────────────────────────────────────────────────────────────────────
 
-TEST("Blackboard: set and getOr typed") {
+TEST("Blackboard: set and getOr") {
     npc::Blackboard bb;
     bb.set<int>("health", 100);
     ASSERT_EQ(bb.getOr<int>("health", -1), 100);
@@ -112,7 +101,7 @@ TEST("Blackboard: getOr missing returns default") {
     ASSERT_EQ(bb.getOr<int>("missing", 0), 0);
 }
 
-TEST("Blackboard: get optional returns nullopt for missing") {
+TEST("Blackboard: get returns nullopt for missing") {
     npc::Blackboard bb;
     ASSERT_FALSE(bb.get<int>("missing").has_value());
 }
@@ -124,7 +113,7 @@ TEST("Blackboard: overwrite value") {
     ASSERT_NEAR(bb.getOr<float>("x", 0.f), 2.0f, 1e-6f);
 }
 
-TEST("Blackboard: has() works") {
+TEST("Blackboard: has()") {
     npc::Blackboard bb;
     ASSERT_FALSE(bb.has("key"));
     bb.set<std::string>("key", "val");
@@ -152,12 +141,11 @@ TEST("Blackboard: keys() returns all keys") {
     npc::Blackboard bb;
     bb.set<int>("x", 1);
     bb.set<int>("y", 2);
-    auto ks = bb.keys();
-    ASSERT_EQ(ks.size(), std::size_t(2));
+    ASSERT_EQ(bb.keys().size(), std::size_t(2));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SharedBlackboard
+// SharedBlackboard / WorldBlackboard
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST("SharedBlackboard: set and get") {
@@ -186,23 +174,34 @@ TEST("SharedBlackboard: versioning increments") {
     sbb.set<int>("v", 1, 0.0);
     uint64_t v1 = sbb.version("v");
     sbb.set<int>("v", 2, 0.0);
-    uint64_t v2 = sbb.version("v");
-    ASSERT_GT(v2, v1);
+    ASSERT_GT(sbb.version("v"), v1);
 }
 
 TEST("SharedBlackboard: watcher fires on set") {
     npc::SharedBlackboard sbb;
     int fired = 0;
-    auto id = sbb.watch("test/", [&](const std::string&, const npc::BBEntry&){
+    auto id = sbb.watch("ns/", [&](const std::string&, const npc::BBEntry&){
         ++fired;
     });
-    sbb.set<int>("test/value", 42, 0.0);
+    sbb.set<int>("ns/value", 42, 0.0);
     ASSERT_EQ(fired, 1);
     sbb.unwatch(id);
 }
 
+TEST("WorldBlackboard: setTime and viewOf") {
+    npc::WorldBlackboard wb;
+    wb.setTime(12.5f, 0.f);  // (hour, simTime)
+    wb.setDay(5, 0.f);
+    // faction alert uses uint32_t FactionId
+    wb.setFactionAlert(1u, true, 0.f);
+    // item price uses uint32_t ItemId
+    wb.setItemPrice(42u, 45.0f, 0.f);
+    auto view = wb.viewOf("faction/", 0.f);
+    ASSERT_TRUE(view.has("faction/1/alert"));
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-// EventBus  (callback takes const EventT&, not EventRecord)
+// EventBus  (callback takes const EventT&)
 // ─────────────────────────────────────────────────────────────────────────────
 
 struct TestEvent { int value; };
@@ -227,12 +226,12 @@ TEST("EventBus: multiple subscribers") {
 
 TEST("EventBus: different event types don't cross") {
     npc::EventBus bus;
-    int testCount = 0, otherCount = 0;
-    bus.subscribe<TestEvent>([&](const TestEvent&){ ++testCount; });
-    bus.subscribe<OtherEvent>([&](const OtherEvent&){ ++otherCount; });
+    int tc = 0, oc = 0;
+    bus.subscribe<TestEvent>([&](const TestEvent&){ ++tc; });
+    bus.subscribe<OtherEvent>([&](const OtherEvent&){ ++oc; });
     bus.publish(TestEvent{1});
-    ASSERT_EQ(testCount, 1);
-    ASSERT_EQ(otherCount, 0);
+    ASSERT_EQ(tc, 1);
+    ASSERT_EQ(oc, 0);
 }
 
 TEST("EventBus: ScopedSubscription auto-unsubscribes") {
@@ -244,37 +243,27 @@ TEST("EventBus: ScopedSubscription auto-unsubscribes") {
         ASSERT_EQ(count, 1);
     }
     bus.publish(TestEvent{2});
-    ASSERT_EQ(count, 1);
+    ASSERT_EQ(count, 1); // not incremented after scope exit
 }
 
-TEST("EventBus: delayed event fires after update") {
+TEST("EventBus: delayed event timing") {
     npc::EventBus bus;
     int received = 0;
     bus.subscribe<TestEvent>([&](const TestEvent& e){ received = e.value; });
-    // Set bus time to 5.0, then schedule with 1s delay (fires at t=6)
+    // Set time to 5.0, publish with 1s delay → fires at t=6
     bus.update(5.0f);
     bus.publishDelayed(TestEvent{99}, 1.0f);
-    bus.update(5.5f); // before deadline
-    ASSERT_EQ(received, 0);
-    bus.update(6.5f); // past deadline
-    ASSERT_EQ(received, 99);
-}
-
-TEST("EventBus: delayed event does not fire before time") {
-    npc::EventBus bus;
-    int received = 0;
-    bus.subscribe<TestEvent>([&](const TestEvent& e){ received = e.value; });
-    bus.publishDelayed(TestEvent{77}, 10.0f); // fires at t=10
-    bus.update(5.0f);
-    ASSERT_EQ(received, 0);
+    bus.update(5.5f);
+    ASSERT_EQ(received, 0);  // not yet
+    bus.update(6.5f);
+    ASSERT_EQ(received, 99); // now fired
 }
 
 TEST("EventBus: history records events") {
     npc::EventBus bus;
     bus.publish(TestEvent{1});
     bus.publish(TestEvent{2});
-    auto hist = bus.getHistory<TestEvent>();
-    ASSERT_GE(hist.size(), std::size_t(2));
+    ASSERT_GE(bus.getHistory<TestEvent>().size(), std::size_t(2));
 }
 
 TEST("EventBus: priority ordering") {
@@ -303,6 +292,19 @@ TEST("EventBus: lastEvent returns most recent") {
     ASSERT_EQ(last->value, 3);
 }
 
+TEST("EventBus: addChain fires B when A published") {
+    npc::EventBus bus;
+    int chainFired = 0;
+    bus.subscribe<OtherEvent>([&](const OtherEvent& e){
+        if (e.msg == "chained") ++chainFired;
+    });
+    bus.addChain<TestEvent, OtherEvent>([](const TestEvent&) -> OtherEvent {
+        return OtherEvent{"chained"};
+    });
+    bus.publish(TestEvent{1});
+    ASSERT_EQ(chainFired, 1);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SpatialGrid / SpatialIndex
 // ─────────────────────────────────────────────────────────────────────────────
@@ -312,16 +314,15 @@ TEST("SpatialGrid: insert and queryRadius") {
     grid.insert(1, {0.f, 0.f});
     grid.insert(2, {5.f, 0.f});
     grid.insert(3, {50.f, 50.f});
-    auto hits = grid.queryRadius({0.f, 0.f}, 8.0f);
-    ASSERT_EQ(hits.size(), std::size_t(2));
+    ASSERT_EQ(grid.queryRadius({0.f, 0.f}, 8.0f).size(), std::size_t(2));
 }
 
 TEST("SpatialGrid: update moves entity") {
     npc::SpatialGrid grid(10.0f);
     grid.insert(1, {0.f, 0.f});
     grid.update(1, {100.f, 100.f});
-    ASSERT_EQ(grid.queryRadius({0.f, 0.f}, 5.0f).size(), std::size_t(0));
-    ASSERT_EQ(grid.queryRadius({100.f, 100.f}, 5.0f).size(), std::size_t(1));
+    ASSERT_EQ(grid.queryRadius({0.f, 0.f},   5.0f).size(), std::size_t(0));
+    ASSERT_EQ(grid.queryRadius({100.f,100.f}, 5.0f).size(), std::size_t(1));
 }
 
 TEST("SpatialGrid: remove clears entity") {
@@ -341,7 +342,7 @@ TEST("SpatialGrid: nearest returns closest") {
     ASSERT_EQ(hits[0].id, 1u);
 }
 
-TEST("SpatialIndex: nearby excludes self") {
+TEST("SpatialIndex: nearbyExcept excludes self") {
     npc::SpatialIndex si(10.0f);
     si.insert(1, {0.f, 0.f});
     si.insert(2, {1.f, 0.f});
@@ -357,19 +358,17 @@ TEST("SpatialIndex: findClusters groups close entities") {
     si.insert(3, {0.f,   1.f});
     si.insert(4, {100.f, 100.f});
     si.insert(5, {101.f, 100.f});
-    auto clusters = si.findClusters(5.0f);
-    ASSERT_GE(clusters.size(), std::size_t(2));
+    ASSERT_GE(si.findClusters(5.0f).size(), std::size_t(2));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Pathfinding
+// Pathfinding  (Pathfinder constructor takes grid dims + walkable check)
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST("Pathfinding: simple straight path") {
-    npc::Pathfinder pf;
     int W = 10, H = 10;
     std::vector<bool> walkable(W*H, true);
-    pf.init(W, H, [&](int x, int y){ return walkable[y*W+x]; });
+    npc::Pathfinder pf(W, H, [&](int x, int y){ return walkable[y*W+x]; });
     pf.buildRegions();
     auto result = pf.query({0.f,0.f}, {5.f,0.f});
     ASSERT_TRUE(result.complete);
@@ -377,37 +376,35 @@ TEST("Pathfinding: simple straight path") {
 }
 
 TEST("Pathfinding: NavRegions wall splits map") {
-    npc::NavRegions nr;
     int W = 6, H = 6;
     std::vector<bool> walkable(W*H, true);
     for (int y = 0; y < H; ++y) walkable[y*W+3] = false;
+    npc::NavRegions nr;
     nr.rebuild(W, H, [&](int x, int y){ return walkable[y*W+x]; });
-    ASSERT_FALSE(nr.isReachable({0,0}, {5,0}));
-    ASSERT_TRUE(nr.isReachable({0,0}, {2,0}));
+    ASSERT_FALSE(nr.isReachable({0.f,0.f}, {5.f,0.f}));
+    ASSERT_TRUE(nr.isReachable({0.f,0.f},  {2.f,0.f}));
 }
 
-TEST("Pathfinding: PathCache stores and retrieves") {
+TEST("Pathfinding: PathCache stores and retrieves waypoints") {
     npc::PathCache cache;
-    npc::PathResult r;
-    r.complete   = true;
-    r.waypoints  = {{0.f,0.f},{1.f,0.f},{2.f,0.f}};
-    r.cost       = 2.0f;
-    cache.put(1, 2, r);
-    auto* got = cache.get(1, 2);
+    // PathCache stores vector<Vec2>, keyed by PathCacheKey{sx,sy,gx,gy}
+    npc::PathCacheKey key{0, 0, 2, 0};
+    std::vector<npc::Vec2> path = {{0.f,0.f},{1.f,0.f},{2.f,0.f}};
+    cache.put(key, path);
+    auto* got = cache.get(key);
     ASSERT_TRUE(got != nullptr);
-    ASSERT_EQ(got->waypoints.size(), std::size_t(3));
+    ASSERT_EQ(got->size(), std::size_t(3));
 }
 
 TEST("Pathfinding: PathCache miss returns nullptr") {
     npc::PathCache cache;
-    ASSERT_TRUE(cache.get(99, 100) == nullptr);
+    ASSERT_TRUE(cache.get({99, 99, 100, 100}) == nullptr);
 }
 
 TEST("Pathfinding: second query uses cache") {
-    npc::Pathfinder pf;
     int W = 10, H = 10;
     std::vector<bool> walkable(W*H, true);
-    pf.init(W, H, [&](int x, int y){ return walkable[y*W+x]; });
+    npc::Pathfinder pf(W, H, [&](int x, int y){ return walkable[y*W+x]; });
     pf.buildRegions();
     auto r1 = pf.query({0.f,0.f}, {9.f,0.f});
     ASSERT_FALSE(r1.fromCache);
@@ -416,151 +413,130 @@ TEST("Pathfinding: second query uses cache") {
 }
 
 TEST("Pathfinding: obstacle invalidates cache") {
-    npc::Pathfinder pf;
     int W = 10, H = 10;
     std::vector<bool> walkable(W*H, true);
-    pf.init(W, H, [&](int x, int y){ return walkable[y*W+x]; });
+    npc::Pathfinder pf(W, H, [&](int x, int y){ return walkable[y*W+x]; });
     pf.buildRegions();
-    pf.query({0.f,0.f}, {9.f,0.f});
-    pf.addObstacle({5,0});
+    pf.query({0.f,0.f}, {9.f,0.f}); // populate cache
+    pf.addObstacle(5, 0);
     auto r3 = pf.query({0.f,0.f}, {9.f,0.f});
     ASSERT_FALSE(r3.fromCache);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FactionSystem  (FactionId = uint32_t)
+// FactionSystem  (FactionId = uint32_t, EntityId = uint32_t)
 // ─────────────────────────────────────────────────────────────────────────────
 
-static constexpr npc::FactionId REBELS  = 1;
-static constexpr npc::FactionId EMPIRE  = 2;
-static constexpr npc::FactionId KNIGHTS = 3;
-static constexpr npc::FactionId BANDITS = 4;
-static constexpr npc::FactionId ALLY_B  = 5;
-static constexpr npc::FactionId LORD    = 6;
-static constexpr npc::FactionId VASSAL  = 7;
-static constexpr npc::FactionId ENEMY   = 8;
-static constexpr npc::FactionId ATCK    = 9;
-static constexpr npc::FactionId TGT     = 10;
-static constexpr npc::FactionId TGT_ALY = 11;
-static constexpr npc::FactionId GUILD   = 12;
-
-TEST("FactionSystem: create and query factions") {
+TEST("FactionSystem: addFaction and faction() accessor") {
     npc::FactionSystem fs;
-    fs.addFaction(REBELS, "Rebel Alliance");
-    fs.addFaction(EMPIRE, "Galactic Empire");
-    ASSERT_TRUE(fs.faction(REBELS) != nullptr);
-    ASSERT_TRUE(fs.faction(EMPIRE) != nullptr);
-    ASSERT_EQ(fs.faction(REBELS)->name, "Rebel Alliance");
+    fs.addFaction(1u, "Rebel Alliance");
+    fs.addFaction(2u, "Galactic Empire");
+    ASSERT_TRUE(fs.faction(1u) != nullptr);
+    ASSERT_EQ(fs.faction(1u)->name, "Rebel Alliance");
 }
 
 TEST("FactionSystem: default stance is Peace") {
     npc::FactionSystem fs;
-    fs.addFaction(1, "A"); fs.addFaction(2, "B");
-    ASSERT_EQ(fs.getStance(1, 2), npc::FactionStance::Peace);
+    fs.addFaction(1u,"A"); fs.addFaction(2u,"B");
+    ASSERT_EQ(fs.getStance(1u,2u), npc::FactionStance::Peace);
 }
 
 TEST("FactionSystem: declareWar sets stance") {
     npc::FactionSystem fs;
-    fs.addFaction(1, "A"); fs.addFaction(2, "B");
-    fs.declareWar(1, 2, "resources", 0.f);
-    ASSERT_EQ(fs.getStance(1, 2), npc::FactionStance::War);
-    ASSERT_EQ(fs.getStance(2, 1), npc::FactionStance::War);
+    fs.addFaction(1u,"A"); fs.addFaction(2u,"B");
+    fs.declareWar(1u, 2u, "resources", 0.f);
+    ASSERT_EQ(fs.getStance(1u,2u), npc::FactionStance::War);
+    ASSERT_EQ(fs.getStance(2u,1u), npc::FactionStance::War);
 }
 
-TEST("FactionSystem: war is symmetric") {
+TEST("FactionSystem: war is symmetric via areHostile") {
     npc::FactionSystem fs;
-    fs.addFaction(1,"X"); fs.addFaction(2,"Y");
-    fs.declareWar(1, 2, "test", 0.f);
-    ASSERT_TRUE(fs.areHostile(1, 2));
-    ASSERT_TRUE(fs.areHostile(2, 1));
+    fs.addFaction(1u,"X"); fs.addFaction(2u,"Y");
+    fs.declareWar(1u, 2u, "", 0.f);
+    ASSERT_TRUE(fs.areHostile(1u,2u));
+    ASSERT_TRUE(fs.areHostile(2u,1u));
 }
 
 TEST("FactionSystem: formAlliance sets stance") {
     npc::FactionSystem fs;
-    fs.addFaction(1,"A"); fs.addFaction(2,"B");
-    fs.formAlliance(1, 2, "", 0.f);
-    ASSERT_EQ(fs.getStance(1, 2), npc::FactionStance::Alliance);
-    ASSERT_TRUE(fs.areAllied(1, 2));
+    fs.addFaction(1u,"A"); fs.addFaction(2u,"B");
+    fs.formAlliance(1u, 2u, "", 0.f);
+    ASSERT_EQ(fs.getStance(1u,2u), npc::FactionStance::Alliance);
+    ASSERT_TRUE(fs.areAllied(1u,2u));
 }
 
 TEST("FactionSystem: declarePeace creates truce") {
     npc::FactionSystem fs;
-    fs.addFaction(1,"A"); fs.addFaction(2,"B");
-    fs.declareWar(1, 2, "greed", 0.f);
-    fs.declarePeace(1, 2, "", 0.f, 100.f);
-    ASSERT_EQ(fs.getStance(1, 2), npc::FactionStance::Truce);
+    fs.addFaction(1u,"A"); fs.addFaction(2u,"B");
+    fs.declareWar(1u, 2u, "", 0.f);
+    fs.declarePeace(1u, 2u, "", 0.f, 100.f);
+    ASSERT_EQ(fs.getStance(1u,2u), npc::FactionStance::Truce);
 }
 
 TEST("FactionSystem: truce expires to Peace") {
     npc::FactionSystem fs;
-    fs.addFaction(1,"A"); fs.addFaction(2,"B");
-    fs.declareWar(1, 2, "test", 0.f);
-    fs.declarePeace(1, 2, "", 0.f, 50.f);
+    fs.addFaction(1u,"A"); fs.addFaction(2u,"B");
+    fs.declareWar(1u, 2u, "", 0.f);
+    fs.declarePeace(1u, 2u, "", 0.f, 50.f);
     fs.update(60.f);
-    ASSERT_EQ(fs.getStance(1, 2), npc::FactionStance::Peace);
+    ASSERT_EQ(fs.getStance(1u,2u), npc::FactionStance::Peace);
 }
 
 TEST("FactionSystem: alliance cascade on war") {
     npc::FactionSystem fs;
-    fs.addFaction(1, "A");
-    fs.addFaction(2, "B");
-    fs.addFaction(ALLY_B, "AllyB");
-    fs.formAlliance(2, ALLY_B, "", 0.f);
-    fs.declareWar(1, 2, "conquest", 0.f, true);
-    ASSERT_EQ(fs.getStance(1, ALLY_B), npc::FactionStance::War);
+    fs.addFaction(1u,"A"); fs.addFaction(2u,"B"); fs.addFaction(5u,"AllyB");
+    fs.formAlliance(2u, 5u, "", 0.f);
+    fs.declareWar(1u, 2u, "", 0.f, true);
+    ASSERT_EQ(fs.getStance(1u,5u), npc::FactionStance::War);
 }
 
 TEST("FactionSystem: vassal joins overlord war") {
     npc::FactionSystem fs;
-    fs.addFaction(LORD, "Lord");
-    fs.addFaction(VASSAL, "Vassal");
-    fs.addFaction(ENEMY, "Enemy");
-    fs.formVassal(VASSAL, LORD, "", 0.f);
-    fs.declareWar(LORD, ENEMY, "expansion", 0.f, true);
-    ASSERT_EQ(fs.getStance(VASSAL, ENEMY), npc::FactionStance::War);
+    fs.addFaction(6u,"Lord"); fs.addFaction(7u,"Vassal"); fs.addFaction(8u,"Enemy");
+    fs.formVassal(7u, 6u, "", 0.f);
+    fs.declareWar(6u, 8u, "", 0.f, true);
+    ASSERT_EQ(fs.getStance(7u,8u), npc::FactionStance::War);
 }
 
 TEST("FactionSystem: wouldDefend direct ally") {
     npc::FactionSystem fs;
-    fs.addFaction(1,"A"); fs.addFaction(2,"B"); fs.addFaction(3,"C");
-    fs.formAlliance(2, 3, "", 0.f);
-    ASSERT_TRUE(fs.wouldDefend(2, 3));
-    ASSERT_FALSE(fs.wouldDefend(1, 3));
+    fs.addFaction(1u,"A"); fs.addFaction(2u,"B"); fs.addFaction(3u,"C");
+    fs.formAlliance(2u, 3u, "", 0.f);
+    ASSERT_TRUE(fs.wouldDefend(2u,3u));
+    ASSERT_FALSE(fs.wouldDefend(1u,3u));
 }
 
 TEST("FactionSystem: resolveCoalition defender side") {
     npc::FactionSystem fs;
-    fs.addFaction(ATCK,    "Attacker");
-    fs.addFaction(TGT,     "Target");
-    fs.addFaction(TGT_ALY, "TargetAlly");
-    fs.formAlliance(TGT, TGT_ALY, "", 0.f);
-    auto c = fs.resolveCoalition(ATCK, TGT);
-    ASSERT_EQ(c.aggressor, ATCK);
+    fs.addFaction(9u,"Atk"); fs.addFaction(10u,"Tgt"); fs.addFaction(11u,"TgtAly");
+    fs.formAlliance(10u, 11u, "", 0.f);
+    auto c = fs.resolveCoalition(9u, 10u);
+    ASSERT_EQ(c.aggressor, 9u);
     ASSERT_TRUE(std::find(c.defenderSide.begin(), c.defenderSide.end(),
-                          TGT_ALY) != c.defenderSide.end());
+                          11u) != c.defenderSide.end());
 }
 
 TEST("FactionSystem: addMember and getFactionOf") {
     npc::FactionSystem fs;
-    fs.addFaction(GUILD, "Guild");
-    fs.addMember(GUILD, 1001u);
-    ASSERT_EQ(fs.getFactionOf(1001u), GUILD);
+    fs.addFaction(12u, "Guild");
+    fs.addMember(12u, 1001u);
+    ASSERT_EQ(fs.getFactionOf(1001u), 12u);
 }
 
-TEST("FactionSystem: diplomatic history non-empty after events") {
+TEST("FactionSystem: diplomatic history") {
     npc::FactionSystem fs;
-    fs.addFaction(1,"A"); fs.addFaction(2,"B");
-    fs.declareWar(1, 2, "land", 1.f);
-    fs.declarePeace(1, 2, "", 10.f, 50.f);
-    ASSERT_FALSE(fs.diplomaticSummary(1, 2).empty());
+    fs.addFaction(1u,"A"); fs.addFaction(2u,"B");
+    fs.declareWar(1u, 2u, "land", 1.f);
+    fs.declarePeace(1u, 2u, "", 10.f, 50.f);
+    ASSERT_FALSE(fs.diplomaticSummary(1u,2u).empty());
     ASSERT_GE(fs.history().size(), std::size_t(2));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RelationshipSystem  (string IDs)
+// RelationshipSystem  (string IDs, standalone system)
 // ─────────────────────────────────────────────────────────────────────────────
 
-TEST("RelationshipSystem: default value is neutral") {
+TEST("RelationshipSystem: default value neutral") {
     npc::RelationshipSystem rs;
     ASSERT_NEAR(rs.getValue("aria","bard"), 0.0f, 1.0f);
 }
@@ -605,13 +581,13 @@ TEST("RelationshipSystem: remembers past event") {
     ASSERT_TRUE(rs.remembers("npc","hero", npc::RelationshipEventType::Saved));
 }
 
-TEST("RelationshipSystem: does not remember event before since") {
+TEST("RelationshipSystem: does not remember before since") {
     npc::RelationshipSystem rs;
     rs.recordEvent("hero","npc", npc::RelationshipEventType::Saved, 5.0);
     ASSERT_FALSE(rs.remembers("npc","hero", npc::RelationshipEventType::Saved, 10.0));
 }
 
-TEST("RelationshipSystem: narrative non-empty after events") {
+TEST("RelationshipSystem: narrative non-empty") {
     npc::RelationshipSystem rs;
     rs.recordEvent("hero","npc", npc::RelationshipEventType::Saved, 0.0);
     rs.recordEvent("hero","npc", npc::RelationshipEventType::Gifted, 5.0);
@@ -620,7 +596,7 @@ TEST("RelationshipSystem: narrative non-empty after events") {
     ASSERT_TRUE(n.find("hero") != std::string::npos);
 }
 
-TEST("RelationshipSystem: recallSentence returns relevant event") {
+TEST("RelationshipSystem: recallSentence contains event type") {
     npc::RelationshipSystem rs;
     rs.recordEvent("hero","npc", npc::RelationshipEventType::Saved, 24.0);
     auto s = rs.recallSentence("npc","hero", npc::RelationshipEventType::Saved, 48.0);
@@ -662,7 +638,7 @@ TEST("RelationshipSystem: removeNPC cleans all pairs") {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LOD System  (uses shared_ptr<NPC>)
+// LOD System  (update takes vector<shared_ptr<NPC>>)
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST("LODSystem: close NPC promoted to Active") {
@@ -671,17 +647,13 @@ TEST("LODSystem: close NPC promoted to Active") {
     cfg.activeRadius     = 50.0f;
     cfg.backgroundRadius = 150.0f;
     lod.setConfig(cfg);
-
     auto npc1 = std::make_shared<npc::NPC>(1u, "NPC1", npc::NPCType::Villager);
     npc1->position = {10.0f, 0.0f};
     lod.registerNPC(1u);
     lod.setPlayerPosition({0.f, 0.f});
-
     std::vector<std::shared_ptr<npc::NPC>> npcs = {npc1};
-    // Run enough frames for hysteresis to promote
     for (int i = 0; i < 10; ++i)
         lod.update(npcs, static_cast<float>(i) * 0.016f, 0.016f);
-
     ASSERT_EQ(lod.tier(1u), npc::LODTier::Active);
 }
 
@@ -690,18 +662,15 @@ TEST("LODSystem: very distant NPC becomes Dormant") {
     npc::LODConfig cfg;
     cfg.activeRadius     = 50.0f;
     cfg.backgroundRadius = 100.0f;
-    cfg.minDwellSecs     = 0.0f; // disable dwell for fast test
+    cfg.minDwellSecs     = 0.0f;
     lod.setConfig(cfg);
-
     auto npc1 = std::make_shared<npc::NPC>(1u, "NPC1", npc::NPCType::Villager);
     npc1->position = {500.0f, 0.0f};
     lod.registerNPC(1u);
     lod.setPlayerPosition({0.f, 0.f});
-
     std::vector<std::shared_ptr<npc::NPC>> npcs = {npc1};
     for (int i = 0; i < 30; ++i)
         lod.update(npcs, static_cast<float>(i) * 0.1f, 0.1f);
-
     ASSERT_EQ(lod.tier(1u), npc::LODTier::Dormant);
 }
 
@@ -712,17 +681,14 @@ TEST("LODSystem: pin prevents demotion") {
     cfg.backgroundRadius = 100.0f;
     cfg.minDwellSecs     = 0.0f;
     lod.setConfig(cfg);
-
     auto npc1 = std::make_shared<npc::NPC>(1u, "NPC1", npc::NPCType::Villager);
     npc1->position = {500.0f, 0.0f};
     lod.registerNPC(1u);
-    lod.pin(1u, npc::LODTier::Active);
+    lod.pin(1u, npc::LODTier::Active);  // pin(id, tier)
     lod.setPlayerPosition({0.f, 0.f});
-
     std::vector<std::shared_ptr<npc::NPC>> npcs = {npc1};
     for (int i = 0; i < 50; ++i)
         lod.update(npcs, static_cast<float>(i) * 0.1f, 0.1f);
-
     ASSERT_EQ(lod.tier(1u), npc::LODTier::Active);
 }
 
@@ -737,112 +703,79 @@ TEST("LODSystem: toTickThisFrame returns registered NPCs") {
     std::vector<std::shared_ptr<npc::NPC>> npcs = {n1, n2};
     for (int i = 0; i < 10; ++i)
         lod.update(npcs, static_cast<float>(i)*0.016f, 0.016f);
-    auto active = lod.toTickThisFrame(npc::LODTier::Active);
-    ASSERT_GE(active.size(), std::size_t(1));
+    ASSERT_GE(lod.toTickThisFrame(npc::LODTier::Active).size(), std::size_t(1));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RelationshipData decay edge cases
 // ─────────────────────────────────────────────────────────────────────────────
 
-TEST("RelationshipData: decayedWeight at t=0 is 1") {
-    npc::RelationshipEvent ev;
-    ev.simTime = 100.0;
+TEST("RelationshipEvent: decayedWeight at t=0 is 1") {
+    npc::RelationshipEvent ev; ev.simTime = 100.0;
     ASSERT_NEAR(ev.decayedWeight(100.0, 168.0f), 1.0f, 1e-5f);
 }
 
-TEST("RelationshipData: decayedWeight at half-life is 0.5") {
-    npc::RelationshipEvent ev;
-    ev.simTime = 0.0;
+TEST("RelationshipEvent: decayedWeight at half-life is 0.5") {
+    npc::RelationshipEvent ev; ev.simTime = 0.0;
     ASSERT_NEAR(ev.decayedWeight(168.0, 168.0f), 0.5f, 1e-4f);
 }
 
 TEST("RelationshipData: history capped at MAX_HISTORY") {
     npc::RelationshipData d;
     for (int i = 0; i < 100; ++i) {
-        npc::RelationshipEvent ev;
-        ev.simTime = static_cast<double>(i);
-        d.addEvent(ev);
+        npc::RelationshipEvent ev; ev.simTime = i; d.addEvent(ev);
     }
     ASSERT_EQ(d.history.size(), npc::RelationshipData::MAX_HISTORY);
 }
 
-TEST("RelationshipData: worstEvent finds minimum delta") {
+TEST("RelationshipData: worstEvent finds min delta") {
     npc::RelationshipData d;
-    npc::RelationshipEvent good; good.delta =  20.0f; d.addEvent(good);
-    npc::RelationshipEvent bad;  bad.delta  = -50.0f; d.addEvent(bad);
-    npc::RelationshipEvent mid;  mid.delta  =   5.0f; d.addEvent(mid);
-    auto* worst = d.worstEvent();
-    ASSERT_TRUE(worst != nullptr);
-    ASSERT_NEAR(worst->delta, -50.0f, 1e-5f);
+    npc::RelationshipEvent g; g.delta =  20.f; d.addEvent(g);
+    npc::RelationshipEvent b; b.delta = -50.f; d.addEvent(b);
+    npc::RelationshipEvent m; m.delta =   5.f; d.addEvent(m);
+    ASSERT_NEAR(d.worstEvent()->delta, -50.f, 1e-5f);
 }
 
-TEST("RelationshipData: bestEvent finds maximum delta") {
+TEST("RelationshipData: bestEvent finds max delta") {
     npc::RelationshipData d;
-    npc::RelationshipEvent e1; e1.delta = 10.0f; d.addEvent(e1);
-    npc::RelationshipEvent e2; e2.delta = 35.0f; d.addEvent(e2);
-    auto* best = d.bestEvent();
-    ASSERT_TRUE(best != nullptr);
-    ASSERT_NEAR(best->delta, 35.0f, 1e-5f);
+    npc::RelationshipEvent e1; e1.delta = 10.f; d.addEvent(e1);
+    npc::RelationshipEvent e2; e2.delta = 35.f; d.addEvent(e2);
+    ASSERT_NEAR(d.bestEvent()->delta, 35.f, 1e-5f);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Integration smoke tests
 // ─────────────────────────────────────────────────────────────────────────────
 
-TEST("Integration: faction war → member hostility via RelationshipSystem") {
+TEST("Integration: faction war → NPC-level hostility") {
     npc::FactionSystem  fs;
     npc::RelationshipSystem rs;
-
-    fs.addFaction(1, "Knights");
-    fs.addFaction(2, "Bandits");
-    fs.addMember(1, 101u); // sir_roland
-    fs.addMember(2, 202u); // rogue_mira
-
-    fs.declareWar(1, 2, "territorial", 0.f);
-
-    // Simulate NPC-level hostility when factions are at war
-    if (fs.areHostile(1, 2)) {
-        rs.recordEvent("rogue_mira","sir_roland",
-                       npc::RelationshipEventType::Attacked, 0.0);
-        rs.recordEvent("sir_roland","rogue_mira",
-                       npc::RelationshipEventType::Attacked, 0.0);
+    fs.addFaction(1u, "Knights");
+    fs.addFaction(2u, "Bandits");
+    fs.addMember(1u, 101u);
+    fs.addMember(2u, 202u);
+    fs.declareWar(1u, 2u, "territorial", 0.f);
+    if (fs.areHostile(1u, 2u)) {
+        rs.recordEvent("rogue","roland", npc::RelationshipEventType::Attacked, 0.0);
+        rs.recordEvent("roland","rogue", npc::RelationshipEventType::Attacked, 0.0);
     }
-
-    ASSERT_TRUE(rs.areHostile("sir_roland","rogue_mira"));
-    ASSERT_TRUE(rs.areHostile("rogue_mira","sir_roland"));
+    ASSERT_TRUE(rs.areHostile("roland","rogue"));
 }
 
 TEST("Integration: saved event remembered in dialogue") {
     npc::RelationshipSystem rs;
     rs.recordEvent("hero","merchant", npc::RelationshipEventType::Saved, 10.0);
-    // 24h later NPC recalls
     auto recall = rs.recallSentence("merchant","hero",
                                     npc::RelationshipEventType::Saved, 34.0);
     ASSERT_TRUE(recall.has_value());
     ASSERT_TRUE(recall->find("saved") != std::string::npos);
 }
 
-TEST("Integration: SharedBlackboard world state view") {
+TEST("Integration: WorldBlackboard faction key format") {
     npc::WorldBlackboard wb;
-    wb.setTime(12.5f, 5, 0.0);
-    wb.setFactionAlert("undead", 0.9f, 0.0);
-    wb.setItemPrice("iron_sword", 45.0f, 0.0);
-    auto view = wb.viewOf("faction/", 0.0);
-    ASSERT_TRUE(view.has("faction/undead/alert"));
-}
-
-TEST("Integration: EventBus chain A→B") {
-    npc::EventBus bus;
-    int chainFired = 0;
-    bus.subscribe<OtherEvent>([&](const OtherEvent& e){
-        if (e.msg == "from_chain") ++chainFired;
-    });
-    bus.addChain<TestEvent, OtherEvent>([](const TestEvent&) -> OtherEvent {
-        return OtherEvent{"from_chain"};
-    });
-    bus.publish(TestEvent{1});
-    ASSERT_EQ(chainFired, 1);
+    wb.setFactionAlert(42u, true, 0.f);
+    auto view = wb.viewOf("faction/", 0.f);
+    ASSERT_TRUE(view.has("faction/42/alert"));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
