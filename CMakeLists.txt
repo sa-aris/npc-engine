@@ -29,3 +29,19 @@ target_include_directories(npc_lib PUBLIC
 
 add_executable(village_sim examples/village_sim.cpp)
 target_link_libraries(village_sim PRIVATE npc_lib)
+
+# ─── Test Suite ──────────────────────────────────────────────────────
+
+add_executable(run_tests tests/run_tests.cpp)
+target_include_directories(run_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests
+)
+target_link_libraries(run_tests PRIVATE npc_lib)
+target_compile_options(run_tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-O2>
+)
+
+# CTest integration (optional: cmake --build build && ctest)
+enable_testing()
+add_test(NAME npc_tests COMMAND run_tests)
